@@ -1,0 +1,384 @@
+# LLM Service
+{{- if .Values.services.llmSvc.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.services.llmSvc.name }}
+  labels:
+    app: {{ .Values.services.llmSvc.name }}
+    component: llm-service
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.services.llmSvc.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.services.llmSvc.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.services.llmSvc.name }}
+        component: llm-service
+        {{- include "ragline.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      {{- if .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }}
+      
+      {{- if .Values.initContainers.fixPermissions.enabled }}
+      initContainers:
+      - name: fix-permissions
+        image: {{ .Values.initContainers.fixPermissions.image }}
+        command:
+          {{- toYaml .Values.initContainers.fixPermissions.command | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.initContainers.fixPermissions.securityContext | nindent 10 }}
+        volumeMounts:
+        {{- if .Values.storage.persistentVolume.enabled }}
+        - name: ragline-data
+          mountPath: /app/data
+        {{- end }}
+        {{- if .Values.storage.llmModelsPV.enabled }}
+        - name: models-storage
+          mountPath: /app/models
+        {{- end }}
+      {{- end }}
+      
+      containers:
+      - name: {{ .Values.services.llmSvc.name }}
+        image: {{ include "ragline.image" (dict "Values" .Values "repository" .Values.services.llmSvc.image.repository) }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        ports:
+        - containerPort: {{ .Values.services.llmSvc.port }}
+          name: http
+        envFrom:
+        - configMapRef:
+            name: ragline-config
+        - secretRef:
+            name: ragline-secrets
+        volumeMounts:
+        {{- if .Values.storage.persistentVolume.enabled }}
+        - name: ragline-data
+          mountPath: /app/data
+          readOnly: false
+        {{- end }}
+        {{- if .Values.storage.llmModelsPV.enabled }}
+        - name: models-storage
+          mountPath: /app/models
+          readOnly: false
+        {{- end }}
+        resources:
+          {{- toYaml .Values.services.llmSvc.resources | nindent 10 }}
+        {{- if .Values.healthChecks.enabled }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          {{- toYaml .Values.healthChecks.livenessProbe | nindent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          {{- toYaml .Values.healthChecks.readinessProbe | nindent 10 }}
+        {{- end }}
+      volumes:
+      {{- if .Values.storage.persistentVolume.enabled }}
+      - name: ragline-data
+        persistentVolumeClaim:
+          claimName: ragline-data-pvc
+      {{- end }}
+      {{- if .Values.storage.llmModelsPV.enabled }}
+      - name: models-storage
+        persistentVolumeClaim:
+          claimName: llm-models-pvc
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.services.llmSvc.name }}-service
+  labels:
+    app: {{ .Values.services.llmSvc.name }}
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.services.llmSvc.service.type }}
+  ports:
+  - name: http
+    port: {{ .Values.services.llmSvc.port }}
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: {{ .Values.services.llmSvc.name }}
+{{- end }}
+---
+# MCP Service
+{{- if .Values.services.mcpSvc.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.services.mcpSvc.name }}
+  labels:
+    app: {{ .Values.services.mcpSvc.name }}
+    component: mcp-service
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.services.mcpSvc.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.services.mcpSvc.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.services.mcpSvc.name }}
+        component: mcp-service
+        {{- include "ragline.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ .Values.services.mcpSvc.name }}
+        image: {{ include "ragline.image" (dict "Values" .Values "repository" .Values.services.mcpSvc.image.repository) }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        ports:
+        - containerPort: {{ .Values.services.mcpSvc.port }}
+          name: http
+        envFrom:
+        - configMapRef:
+            name: ragline-config
+        - configMapRef:
+            name: ragline-mcp-svc-config
+        - secretRef:
+            name: ragline-secrets
+        env:
+        - name: PORT
+          value: "{{ .Values.services.mcpSvc.port }}"
+        resources:
+          {{- toYaml .Values.services.mcpSvc.resources | nindent 10 }}
+        {{- if .Values.healthChecks.enabled }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          {{- toYaml .Values.healthChecks.livenessProbe | nindent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          {{- toYaml .Values.healthChecks.readinessProbe | nindent 10 }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.services.mcpSvc.name }}-service
+  labels:
+    app: {{ .Values.services.mcpSvc.name }}
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.services.mcpSvc.service.type }}
+  ports:
+  - name: http
+    port: {{ .Values.services.mcpSvc.port }}
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: {{ .Values.services.mcpSvc.name }}
+{{- end }}
+---
+# ADO MCP Service
+{{- if .Values.services.adoMcp.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.services.adoMcp.name }}
+  labels:
+    app: {{ .Values.services.adoMcp.name }}
+    component: ado-mcp-service
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.services.adoMcp.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.services.adoMcp.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.services.adoMcp.name }}
+        component: ado-mcp-service
+        {{- include "ragline.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ .Values.services.adoMcp.name }}
+        image: {{ include "ragline.image" (dict "Values" .Values "repository" .Values.services.adoMcp.image.repository) }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        ports:
+        - containerPort: {{ .Values.services.adoMcp.port }}
+          name: http
+        envFrom:
+        - configMapRef:
+            name: ragline-config
+        - secretRef:
+            name: ragline-secrets
+        env:
+        - name: PORT
+          value: "{{ .Values.services.adoMcp.port }}"
+        - name: AZDO_ORG
+          valueFrom:
+            secretKeyRef:
+              name: ragline-mcp-secrets
+              key: AZDO_ORG
+        - name: AZDO_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: ragline-mcp-secrets
+              key: AZDO_TOKEN
+        resources:
+          {{- toYaml .Values.services.adoMcp.resources | nindent 10 }}
+        {{- if .Values.healthChecks.enabled }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          {{- toYaml .Values.healthChecks.livenessProbe | nindent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          {{- toYaml .Values.healthChecks.readinessProbe | nindent 10 }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.services.adoMcp.name }}-service
+  labels:
+    app: {{ .Values.services.adoMcp.name }}
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.services.adoMcp.service.type }}
+  ports:
+  - name: http
+    port: {{ .Values.services.adoMcp.port }}
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: {{ .Values.services.adoMcp.name }}
+{{- end }}
+---
+# Service alias for internal discovery (match original k8s manifests)
+apiVersion: v1
+kind: Service
+metadata:
+  name: ado-mcp
+  labels:
+    app: {{ .Values.services.adoMcp.name }}
+spec:
+  selector:
+    app: {{ .Values.services.adoMcp.name }}
+  ports:
+  - name: http
+    port: {{ .Values.services.adoMcp.port }}
+    targetPort: http
+    protocol: TCP
+# GitHub MCP Service
+{{- if .Values.services.githubMcp.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.services.githubMcp.name }}
+  labels:
+    app: {{ .Values.services.githubMcp.name }}
+    component: github-mcp-service
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.services.githubMcp.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.services.githubMcp.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.services.githubMcp.name }}
+        component: github-mcp-service
+        {{- include "ragline.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ .Values.services.githubMcp.name }}
+        image: {{ include "ragline.image" (dict "Values" .Values "repository" .Values.services.githubMcp.image.repository) }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        ports:
+        - containerPort: {{ .Values.services.githubMcp.port }}
+          name: http
+        envFrom:
+        - configMapRef:
+            name: ragline-config
+        - secretRef:
+            name: ragline-secrets
+        - secretRef:
+            name: ragline-mcp-secrets
+        env:
+        - name: PORT
+          value: "{{ .Values.services.githubMcp.port }}"
+        resources:
+          {{- toYaml .Values.services.githubMcp.resources | nindent 10 }}
+        {{- if .Values.healthChecks.enabled }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          {{- toYaml .Values.healthChecks.livenessProbe | nindent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          {{- toYaml .Values.healthChecks.readinessProbe | nindent 10 }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.services.githubMcp.name }}-service
+  labels:
+    app: {{ .Values.services.githubMcp.name }}
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.services.githubMcp.service.type }}
+  ports:
+  - name: http
+    port: {{ .Values.services.githubMcp.port }}
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: {{ .Values.services.githubMcp.name }}
+{{- end }}
+
+---
+# GitHub MCP alias service (internal discovery)
+apiVersion: v1
+kind: Service
+metadata:
+  name: github-mcp
+  labels:
+    app: {{ .Values.services.githubMcp.name }}
+spec:
+  selector:
+    app: {{ .Values.services.githubMcp.name }}
+  ports:
+  - name: http
+    port: {{ .Values.services.githubMcp.port }}
+    targetPort: http
+    protocol: TCP

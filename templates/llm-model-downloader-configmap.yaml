@@ -1,0 +1,133 @@
+{{- if .Values.services.llmSvc.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-model-downloader
+  labels:
+    {{- include "ragline.labels" . | nindent 4 }}
+    component: llm-model-downloader
+data:
+  model_downloader.py: |
+    #!/usr/bin/env python3
+    """
+    Model downloader for LLM service
+    Downloads and validates model files
+    """
+    import os
+    import sys
+    import hashlib
+    import requests
+    from pathlib import Path
+    import logging
+
+    # Set up logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger(__name__)
+
+    # Model configurations
+    MODEL_CONFIGS = {
+        "7b": {
+            "name": "Mistral 7B Instruct",
+            "file_name": "mistral-7b-instruct-v0.1.Q4_K_M.gguf",
+            "url": "https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf",
+            "expected_size": 4_000_000_000  # ~4GB
+        },
+        "70b": {
+            "name": "Mistral 70B Instruct", 
+            "file_name": "mistral-70b-instruct-v0.1.Q4_K_M.gguf",
+            "url": "https://huggingface.co/TheBloke/Mistral-70B-Instruct-v0.1-GGUF/resolve/main/mistral-70b-instruct-v0.1.Q4_K_M.gguf",
+            "expected_size": 40_000_000_000  # ~40GB
+        }
+    }
+
+    def download_with_progress(url: str, file_path: Path) -> bool:
+        """Download file with progress reporting"""
+        try:
+            logger.info(f"Starting download from {url}")
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
+            
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded = 0
+            
+            with open(file_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        
+                        if total_size > 0:
+                            progress = (downloaded / total_size) * 100
+                            if downloaded % (50 * 1024 * 1024) == 0:  # Log every 50MB
+                                logger.info(f"Progress: {progress:.1f}% ({downloaded:,}/{total_size:,} bytes)")
+            
+            logger.info(f"Download completed: {file_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Download failed: {e}")
+            return False
+
+    def validate_file(file_path: Path, expected_size: int) -> bool:
+        """Validate downloaded file"""
+        if not file_path.exists():
+            logger.error(f"File not found: {file_path}")
+            return False
+        
+        actual_size = file_path.stat().st_size
+        size_diff = abs(actual_size - expected_size) / expected_size
+        
+        if size_diff > 0.1:  # Allow 10% variance
+            logger.error(f"File size mismatch. Expected: {expected_size:,}, Got: {actual_size:,}")
+            return False
+        
+        logger.info(f"File validation passed: {actual_size:,} bytes")
+        return True
+
+    def main():
+        """Main downloader function"""
+        model_size = os.getenv("MODEL_SIZE", "7b").lower()
+        models_dir = Path(os.getenv("MODELS_PATH", "/models"))
+        force_download = os.getenv("FORCE_DOWNLOAD", "false").lower() == "true"
+        
+        if model_size not in MODEL_CONFIGS:
+            logger.error(f"Unknown model size: {model_size}")
+            sys.exit(1)
+        
+        config = MODEL_CONFIGS[model_size]
+        file_path = models_dir / config["file_name"]
+        
+        logger.info(f"Model downloader starting...")
+        logger.info(f"Model: {config['name']}")
+        logger.info(f"Target path: {file_path}")
+        
+        # Create models directory
+        models_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Check if file already exists and is valid
+        if file_path.exists() and not force_download:
+            if validate_file(file_path, config["expected_size"]):
+                logger.info("Model already exists and is valid. Skipping download.")
+                sys.exit(0)
+            else:
+                logger.info("Existing model is invalid. Re-downloading...")
+                file_path.unlink()
+        
+        # Download model
+        logger.info(f"Downloading {config['name']} ({config['expected_size'] / 1_000_000_000:.1f}GB)")
+        
+        if not download_with_progress(config["url"], file_path):
+            logger.error("Download failed")
+            sys.exit(1)
+        
+        # Validate downloaded file
+        if not validate_file(file_path, config["expected_size"]):
+            logger.error("File validation failed")
+            file_path.unlink()  # Remove invalid file
+            sys.exit(1)
+        
+        logger.info(f"Model download completed successfully: {file_path}")
+
+    if __name__ == "__main__":
+        main()
+{{- end }}

@@ -1,0 +1,402 @@
+name: Helm Chart Validation and Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      dry_run:
+        description: 'Perform dry run only (no actual deployment)'
+        required: false
+        default: false
+        type: boolean
+      force_recreate:
+        description: 'Force recreate all resources'
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches:
+      - main
+      - feature/externalize-models
+    paths:
+      - 'ragline-helm/**'
+      - '.github/workflows/helm-deploy.yml'
+  pull_request:
+    paths:
+      - 'ragline-helm/**'
+      - '.github/workflows/helm-deploy.yml'
+
+env:
+  HELM_VERSION: "3.14.0"
+  KUBECTL_VERSION: "1.28.0"
+  CHART_PATH: "./ragline-helm"
+  RELEASE_NAME: "ragline"
+
+jobs:
+  validate:
+    name: Validate Helm Chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Lint Helm Chart
+        run: |
+          echo "🔍 Linting Helm chart..."
+          helm lint ${{ env.CHART_PATH }}
+
+      - name: Validate Helm Template
+        run: |
+          echo "🔧 Validating Helm templates..."
+          helm template ${{ env.RELEASE_NAME }} ${{ env.CHART_PATH }} \
+            --values ${{ env.CHART_PATH }}/values.yaml \
+            --debug \
+            --dry-run > /tmp/rendered-manifests.yaml
+          
+          echo "📄 Rendered manifests preview:"
+          head -50 /tmp/rendered-manifests.yaml
+
+      - name: Package Helm Chart
+        run: |
+          echo "📦 Packaging Helm chart..."
+          helm package ${{ env.CHART_PATH }} --destination ./charts/
+          ls -la ./charts/
+
+      - name: Upload Chart Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-chart
+          path: ./charts/*.tgz
+          retention-days: 30
+
+  deploy-development:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    needs: validate
+    if: >
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'development') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/feature/externalize-models')
+    environment: development
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl for minikube/development
+        run: |
+          echo "⚙️  Configuring kubectl for development environment..."
+          # Note: In a real deployment, you'd configure your kubeconfig here
+          # For now, this is a placeholder for development setup
+          echo "Development environment detected - kubectl configuration needed"
+
+      - name: Create values override for development
+        run: |
+          cat > values-dev.yaml <<EOF
+          global:
+            registry: ghcr.io/ragline-labs
+            imageTag: latest
+            imagePullPolicy: Always
+            namespace: ragline-dev
+
+          # Enable all services for development
+          services:
+            chatUi:
+              enabled: true
+              service:
+                type: LoadBalancer
+            chatSvc:
+              enabled: true
+            agentSvc:
+              enabled: true
+            llmSvc:
+              enabled: false  # Disable heavy LLM service in dev
+            mcpSvc:
+              enabled: true
+            adoMcp:
+              enabled: true
+            githubMcp:
+              enabled: true
+
+          # Development storage configuration
+          storage:
+            persistentVolume:
+              enabled: true
+              size: 5Gi
+              hostPath: "/tmp/ragline-dev"
+
+          # Development secrets (will be overridden by actual secrets)
+          secrets:
+            azureDevOpsPat: "${{ secrets.AZURE_DEVOPS_PAT }}"
+            githubPat: "${{ secrets.GITHUB_PAT }}"
+            openaiApiKey: "${{ secrets.OPENAI_API_KEY }}"
+            azureOpenaiApiKey: "${{ secrets.AZURE_OPENAI_API_KEY }}"
+            azureOpenaiEndpoint: "${{ secrets.AZURE_OPENAI_ENDPOINT }}"
+            m365TenantId: "${{ secrets.M365_TENANT_ID }}"
+            m365ClientId: "${{ secrets.M365_CLIENT_ID }}"
+            m365ClientSecret: "${{ secrets.M365_CLIENT_SECRET }}"
+            m365Username: "${{ secrets.M365_USERNAME }}"
+            m365Password: "${{ secrets.M365_PASSWORD }}"
+            m365SharepointHost: "${{ secrets.M365_SHAREPOINT_HOST }}"
+            m365SitePath: "${{ secrets.M365_SITE_PATH }}"
+            entraIdClientSecret: "${{ secrets.ENTRA_ID_CLIENT_SECRET }}"
+          EOF
+
+      - name: Deploy with Helm (Development)
+        run: |
+          echo "🚀 Deploying RAGline to development environment..."
+          
+          # Dry run first for validation
+          echo "🔍 Performing dry run..."
+          helm upgrade --install ${{ env.RELEASE_NAME }}-dev ${{ env.CHART_PATH }} \
+            --values values-dev.yaml \
+            --namespace ragline-dev \
+            --create-namespace \
+            --dry-run \
+            --debug
+
+          # Actual deployment (skip if dry_run is true)
+          if [ "${{ inputs.dry_run }}" = "false" ]; then
+            echo "✅ Deploying to development cluster..."
+            helm upgrade --install ${{ env.RELEASE_NAME }}-dev ${{ env.CHART_PATH }} \
+              --values values-dev.yaml \
+              --namespace ragline-dev \
+              --create-namespace \
+              --wait \
+              --timeout=10m \
+              ${{ inputs.force_recreate == 'true' && '--force' || '' }}
+          else
+            echo "🔍 Dry run completed - no actual deployment performed"
+          fi
+
+      - name: Verify Deployment
+        if: inputs.dry_run != 'true'
+        run: |
+          echo "🔍 Verifying deployment..."
+          kubectl get pods -n ragline-dev
+          kubectl get services -n ragline-dev
+          kubectl get pvc -n ragline-dev
+          
+          echo "📊 Deployment status:"
+          helm status ${{ env.RELEASE_NAME }}-dev -n ragline-dev
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: validate
+    if: >
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl for production
+        run: |
+          echo "⚙️  Configuring kubectl for production environment..."
+          # Configure your production kubeconfig here
+          echo "Production environment detected - kubectl configuration needed"
+
+      - name: Create values override for production
+        run: |
+          cat > values-prod.yaml <<EOF
+          global:
+            registry: ghcr.io/ragline-labs
+            imageTag: latest
+            imagePullPolicy: Always
+            namespace: ragline
+
+          # Production configuration with higher resources
+          services:
+            chatUi:
+              enabled: true
+              replicaCount: 3
+              service:
+                type: LoadBalancer
+              resources:
+                requests:
+                  memory: "512Mi"
+                  cpu: "200m"
+                limits:
+                  memory: "1Gi"
+                  cpu: "500m"
+            chatSvc:
+              enabled: true
+              replicaCount: 2
+              resources:
+                requests:
+                  memory: "2Gi"
+                  cpu: "1500m"
+                limits:
+                  memory: "4Gi"
+                  cpu: "3000m"
+            agentSvc:
+              enabled: true
+              resources:
+                requests:
+                  memory: "4Gi"
+                  cpu: "2000m"
+                limits:
+                  memory: "8Gi"
+                  cpu: "4000m"
+            llmSvc:
+              enabled: true
+              resources:
+                requests:
+                  memory: "8Gi"
+                  cpu: "4000m"
+                limits:
+                  memory: "16Gi"
+                  cpu: "8000m"
+            mcpSvc:
+              enabled: true
+            adoMcp:
+              enabled: true
+            githubMcp:
+              enabled: true
+
+          # Production storage configuration
+          storage:
+            persistentVolume:
+              enabled: true
+              size: 100Gi
+              storageClassName: fast-ssd
+
+          # Production secrets
+          secrets:
+            azureDevOpsPat: "${{ secrets.AZURE_DEVOPS_PAT }}"
+            githubPat: "${{ secrets.GITHUB_PAT }}"
+            openaiApiKey: "${{ secrets.OPENAI_API_KEY }}"
+            azureOpenaiApiKey: "${{ secrets.AZURE_OPENAI_API_KEY }}"
+            azureOpenaiEndpoint: "${{ secrets.AZURE_OPENAI_ENDPOINT }}"
+            m365TenantId: "${{ secrets.M365_TENANT_ID }}"
+            m365ClientId: "${{ secrets.M365_CLIENT_ID }}"
+            m365ClientSecret: "${{ secrets.M365_CLIENT_SECRET }}"
+            m365Username: "${{ secrets.M365_USERNAME }}"
+            m365Password: "${{ secrets.M365_PASSWORD }}"
+            m365SharepointHost: "${{ secrets.M365_SHAREPOINT_HOST }}"
+            m365SitePath: "${{ secrets.M365_SITE_PATH }}"
+            entraIdClientSecret: "${{ secrets.ENTRA_ID_CLIENT_SECRET }}"
+
+          # Production-specific configuration
+          config:
+            logLevel: "WARN"
+            llm:
+              modelSize: "70b"  # Use larger model in production
+          EOF
+
+      - name: Deploy with Helm (Production)
+        run: |
+          echo "🚀 Deploying RAGline to production environment..."
+          
+          # Dry run first for validation
+          echo "🔍 Performing dry run..."
+          helm upgrade --install ${{ env.RELEASE_NAME }} ${{ env.CHART_PATH }} \
+            --values values-prod.yaml \
+            --namespace ragline \
+            --create-namespace \
+            --dry-run \
+            --debug
+
+          # Actual deployment (skip if dry_run is true)
+          if [ "${{ inputs.dry_run }}" = "false" ]; then
+            echo "✅ Deploying to production cluster..."
+            helm upgrade --install ${{ env.RELEASE_NAME }} ${{ env.CHART_PATH }} \
+              --values values-prod.yaml \
+              --namespace ragline \
+              --create-namespace \
+              --wait \
+              --timeout=15m \
+              ${{ inputs.force_recreate == 'true' && '--force' || '' }}
+          else
+            echo "🔍 Dry run completed - no actual deployment performed"
+          fi
+
+      - name: Verify Production Deployment
+        if: inputs.dry_run != 'true'
+        run: |
+          echo "🔍 Verifying production deployment..."
+          kubectl get pods -n ragline
+          kubectl get services -n ragline
+          kubectl get pvc -n ragline
+          
+          echo "📊 Deployment status:"
+          helm status ${{ env.RELEASE_NAME }} -n ragline
+          
+          echo "🔗 Service endpoints:"
+          kubectl get svc -n ragline -o wide
+
+      - name: Run Health Checks
+        if: inputs.dry_run != 'true'
+        run: |
+          echo "🏥 Running health checks..."
+          
+          # Wait for all pods to be ready
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=ragline -n ragline --timeout=300s
+          
+          # Check if chat-ui service is accessible
+          CHAT_UI_IP=$(kubectl get svc ragline-chat-ui-service -n ragline -o jsonpath='{.status.loadBalancer.ingress[0].ip}' || echo "pending")
+          echo "Chat UI LoadBalancer IP: $CHAT_UI_IP"
+          
+          if [ "$CHAT_UI_IP" != "pending" ] && [ "$CHAT_UI_IP" != "" ]; then
+            echo "✅ Chat UI service is accessible"
+          else
+            echo "⏳ Chat UI service IP still pending - this is normal for new deployments"
+          fi
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Helm Security Scan
+        run: |
+          echo "🔒 Running security scan on Helm chart..."
+          # Install helm-security scanner or similar tool
+          # This is a placeholder - implement actual security scanning
+          echo "Security scanning completed"
+
+      - name: Check for Secrets in Templates
+        run: |
+          echo "🔍 Checking for hardcoded secrets in templates..."
+          if grep -r "password\|secret\|key" ${{ env.CHART_PATH }}/templates/ --exclude-dir=tests; then
+            echo "⚠️  Found potential secrets in templates - please review"
+          else
+            echo "✅ No hardcoded secrets found in templates"
+          fi

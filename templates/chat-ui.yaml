@@ -1,0 +1,88 @@
+{{- if .Values.services.chatUi.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.services.chatUi.name }}
+  labels:
+    app: {{ .Values.services.chatUi.name }}
+    component: frontend
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.services.chatUi.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.services.chatUi.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.services.chatUi.name }}
+        component: frontend
+        {{- include "ragline.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      {{- if .Values.services.chatUi.securityContext }}
+      securityContext:
+        {{- toYaml .Values.services.chatUi.securityContext | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ .Values.services.chatUi.name }}
+        image: {{ include "ragline.image" (dict "Values" .Values "repository" .Values.services.chatUi.image.repository) }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        ports:
+        - containerPort: {{ .Values.services.chatUi.port }}
+          name: http
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: nginx.conf
+        resources:
+          {{- toYaml .Values.services.chatUi.resources | nindent 10 }}
+        {{- if .Values.healthChecks.enabled }}
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          {{- toYaml .Values.healthChecks.livenessProbe | nindent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          {{- toYaml .Values.healthChecks.readinessProbe | nindent 10 }}
+        {{- end }}
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: ragline-config
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.services.chatUi.name }}-service
+  labels:
+    app: {{ .Values.services.chatUi.name }}
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.services.chatUi.service.type }}
+  ports:
+  - port: {{ .Values.services.chatUi.service.externalPort }}
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: {{ .Values.services.chatUi.name }}
+{{- end }}

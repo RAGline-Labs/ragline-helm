@@ -1,0 +1,301 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ragline-config
+  labels:
+    {{- include "ragline.labels" . | nindent 4 }}
+data:
+  # General configuration
+  DATA_DIR: {{ .Values.config.dataDir | quote }}
+  PYTHONPATH: {{ .Values.config.pythonPath | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  
+  # Processing configuration
+  BASE_FOLDER: {{ .Values.config.baseFolder | quote }}
+  MAX_FILE_CREATED_AGE: {{ .Values.config.maxFileCreatedAge | quote }}
+  MAX_FILE_UPDATED_AGE: {{ .Values.config.maxFileUpdatedAge | quote }}
+  CRITICAL_ENTITIES: {{ .Values.config.criticalEntities | quote }}
+  
+  # Azure DevOps configuration
+  USE_AZURE_DEVOPS: {{ .Values.config.azureDevOps.enabled | quote }}
+  AZURE_DEVOPS_ORG: {{ .Values.config.azureDevOps.org | quote }}
+  AZURE_DEVOPS_PROJECTS: {{ .Values.config.azureDevOps.projects | quote }}
+  ADO_PROJECTS: {{ .Values.config.azureDevOps.projects | quote }}
+  AZURE_DEVOPS_COMPONENTS: {{ .Values.config.azureDevOps.components | quote }}
+  
+  # GitHub Configuration  
+  USE_GITHUB: {{ .Values.config.github.enabled | quote }}
+  GITHUB_ORG: {{ .Values.config.github.org | quote }}
+  GITHUB_ORGS: {{ .Values.config.github.orgs | quote }}
+  GITHUB_COMPONENTS: {{ .Values.config.github.components | quote }}
+  
+  # ChromaDB Collection Configuration
+  CHROMA_COLLECTION_DOCS: {{ .Values.config.chroma.collectionDocs | quote }}
+  CHROMA_COLLECTION_ANALYTICS: {{ .Values.config.chroma.collectionAnalytics | quote }}
+  RAGLINE_MULTI_COLLECTION: {{ .Values.config.chroma.multiCollection | quote }}
+  EMBED_MODEL_NAME: {{ .Values.config.chroma.embedModelName | quote }}
+  
+  # AI Service Configuration
+  AI_PROVIDER: {{ .Values.config.ai.provider | quote }}
+  AI_SERVICE_ENABLED: {{ .Values.config.ai.enabled | quote }}
+  AI_SERVICE_PORT: {{ .Values.config.ai.servicePort | quote }}
+  AI_CONTEXT_ENABLED: {{ .Values.config.ai.contextEnabled | quote }}
+  AI_MAX_CONTEXT_ITEMS: {{ .Values.config.ai.maxContextItems | quote }}
+  AI_MIN_CONTEXT_SCORE: {{ .Values.config.ai.minContextScore | quote }}
+  
+  # Authentication Configuration
+  {{- if .Values.services.agentSvc.enabled }}
+  AGENT_SERVICE_URL: "http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}"
+  {{- end }}
+  JWT_SECRET: {{ .Values.config.auth.jwtSecret | quote }}
+  SESSION_TIMEOUT_HOURS: {{ .Values.config.auth.sessionTimeoutHours | quote }}
+  
+  # Entra ID Configuration
+  ENTRA_ID_ENABLED: {{ .Values.config.auth.entraId.enabled | quote }}
+  ENTRA_ID_TENANT_ID: {{ .Values.config.auth.entraId.tenantId | quote }}
+  ENTRA_ID_CLIENT_ID: {{ .Values.config.auth.entraId.clientId | quote }}
+  ENTRA_ID_REDIRECT_URI: {{ .Values.config.auth.entraId.redirectUri | quote }}
+  
+  # OpenAI Configuration
+  OPENAI_MODEL: {{ .Values.config.openai.model | quote }}
+  OPENAI_TEMPERATURE: {{ .Values.config.openai.temperature | quote }}
+  OPENAI_MAX_TOKENS: {{ .Values.config.openai.maxTokens | quote }}
+  
+  # Azure OpenAI Configuration
+  AZURE_OPENAI_DEPLOYMENT_NAME: {{ .Values.config.azureOpenai.deploymentName | quote }}
+  AZURE_OPENAI_API_VERSION: {{ .Values.config.azureOpenai.apiVersion | quote }}
+  AZURE_OPENAI_TEMPERATURE: {{ .Values.config.azureOpenai.temperature | quote }}
+  AZURE_OPENAI_MAX_TOKENS: {{ .Values.config.azureOpenai.maxTokens | quote }}
+  
+  # Local LLM Configuration
+  LLM_MODEL_SIZE: {{ .Values.config.llm.modelSize | quote }}
+  LLM_SERVICE_ENABLED: {{ .Values.config.llm.enabled | quote }}
+  LLM_SERVICE_PORT: {{ .Values.config.llm.port | quote }}
+  {{- if .Values.services.llmSvc.enabled }}
+  LLM_SERVICE_URL: "http://{{ .Values.services.llmSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.llmSvc.port }}"
+  {{- end }}
+  LLM_FORCE_DOWNLOAD: {{ .Values.config.llm.forceDownload | quote }}
+  LLM_MAX_TOKENS: {{ .Values.config.llm.maxTokens | quote }}
+  LLM_TEMPERATURE: {{ .Values.config.llm.temperature | quote }}
+  LLM_TIMEOUT: {{ .Values.config.llm.timeout | quote }}
+  
+  # M365 Configuration
+  USE_M365: {{ .Values.config.m365.enabled | quote }}
+  M365_SHAREPOINT_FOLDER: {{ .Values.config.m365.sharepointFolder | quote }}
+  
+  # PII Detection
+  PRESIDIO_CONFIDENCE_THRESHOLD: {{ .Values.config.presidio.confidenceThreshold | quote }}
+  
+  # UI Configuration
+  {{- if .Values.services.chatSvc.enabled }}
+  VITE_API_BASE: "http://{{ .Values.services.chatSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }}"
+  VITE_AGENT_API_BASE: "http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}"
+  {{- end }}
+  
+  # Service Host Configuration (for nginx proxy)
+  AGENT_SERVICE_HOST: "{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+  AGENT_SERVICE_PORT: "{{ .Values.services.agentSvc.port }}"
+  CHAT_SERVICE_HOST: "{{ .Values.services.chatSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+  CHAT_SERVICE_PORT: "{{ .Values.services.chatSvc.port }}"
+  MCP_SERVICE_HOST: "{{ .Values.services.mcpSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+  MCP_SERVICE_PORT: "{{ .Values.services.mcpSvc.port }}"
+  ADO_MCP_SERVICE_HOST: "{{ .Values.services.adoMcp.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+  ADO_MCP_SERVICE_PORT: "{{ .Values.services.adoMcp.port }}"
+  {{- if .Values.services.githubMcp.enabled }}
+  GITHUB_MCP_SERVICE_HOST: "{{ .Values.services.githubMcp.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+  GITHUB_MCP_SERVICE_PORT: "{{ .Values.services.githubMcp.port }}"
+  {{- end }}
+  {{- if .Values.services.llmSvc.enabled }}
+  LLM_SERVICE_HOST: "{{ .Values.services.llmSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+  LLM_SERVICE_PORT: "{{ .Values.services.llmSvc.port }}"
+  {{- end }}
+  
+  # Custom Integrations
+  TARGETED_QUERIES_OUTPUT_DIR: {{ .Values.config.customIntegrations.outputDir | quote }}
+  TARGETED_QUERIES_TIME_WINDOW_DAYS: {{ .Values.config.customIntegrations.timeWindowDays | quote }}
+  TARGETED_QUERIES_FREQUENCY_HOURS: {{ .Values.config.customIntegrations.frequencyHours | quote }}
+  
+  # Nginx Configuration for Chat UI
+  nginx.conf: |
+    server {
+        listen       80;
+        listen  [::]:80;
+        server_name  {{ .Values.nginx.serverName | default "localhost" }};
+
+        # Proxy agent requests to agent-svc (must be before root location)
+        location /agent/ {
+            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/agent/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Ledger endpoints - proxy to agent-svc
+        location /ledger/ {
+            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/agent/ledger/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Embeddings sources endpoint - proxy to agent-svc
+        location /embeddings/sources {
+            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/agent/embeddings/sources;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Embeddings status endpoint - proxy to agent-svc
+        location /embeddings/status {
+            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/embeddings/status;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Embeddings list endpoint - proxy to agent-svc
+        location /embeddings/list {
+            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/embeddings/list;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Auth endpoints - proxy to agent-svc
+        location /auth/ {
+            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/auth/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Serve static files
+        location / {
+            root   /usr/share/nginx/html;
+            index  index.html index.htm;
+            try_files $uri $uri/ /index.html;
+        }
+
+        # Proxy API requests to chat-svc
+        location /chat {
+            proxy_pass http://{{ .Values.services.chatSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }};
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_cache_bypass $http_upgrade;
+        }
+
+        # MCP Service endpoints
+        location /mcp/ {
+            proxy_pass http://{{ .Values.services.mcpSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.mcpSvc.port }}/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Azure DevOps MCP endpoints
+        location /ado-mcp/ {
+            proxy_pass http://{{ .Values.services.adoMcp.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.adoMcp.port }}/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        {{- if .Values.services.githubMcp.enabled }}
+        # GitHub MCP endpoints
+        location /github-mcp/ {
+            proxy_pass http://{{ .Values.services.githubMcp.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.githubMcp.port }}/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        {{- end }}
+
+        {{- if .Values.services.llmSvc.enabled }}
+        # LLM Service endpoints
+        location /llm/ {
+            proxy_pass http://{{ .Values.services.llmSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.llmSvc.port }}/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        {{- end }}
+
+        # Other endpoints - proxy to chat-svc
+        location /models {
+            proxy_pass http://{{ .Values.services.chatSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }}/models;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /config {
+            proxy_pass http://{{ .Values.services.chatSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }}/config;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /health {
+            proxy_pass http://{{ .Values.services.chatSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }}/health;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Error pages
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   /usr/share/nginx/html;
+        }
+    }
+  TARGETED_QUERIES_RETENTION_DAYS: {{ .Values.config.customIntegrations.retentionDays | quote }}
+  CUSTOM_INTEGRATIONS_INTERVAL_SEC: {{ .Values.config.customIntegrations.intervalSec | quote }}
+  
+  # Legacy Analytics Configuration (disabled)
+  RAGLINE_ANALYTICS_ENABLED: "false"
+  RAGLINE_24H_INTERVAL_SEC: "86400"
+  RAGLINE_WEEK_AT_UTC_HOUR: "2"
+  RAGLINE_24H_MANIFEST: "/app/manifests/queries.24h.yaml"
+  RAGLINE_WEEK_MANIFEST: "/app/manifests/queries.week.yaml"
+  RAGLINE_PROVIDERS: "github,azuredevops"
+  RAGLINE_WATERMARK_DB: "/app/data/watermark.sqlite"
+  
+  # Query manifests
+  TARGETED_ADO_QUERIES: "/app/manifests/queries.ado.yaml"
+  TARGETED_GITHUB_QUERIES: "/app/manifests/queries.github.yaml"
+  
+  # Organizational Context
+  ORG_CONTEXT: |
+{{ .Values.config.orgContext | indent 4 }}

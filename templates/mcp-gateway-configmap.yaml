@@ -1,0 +1,21 @@
+{{- if .Values.services.mcpSvc.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ragline-mcp-gateway-config
+  labels:
+    {{- include "ragline.labels" . | nindent 4 }}
+    component: mcp-gateway
+data:
+  # MCP Service URLs
+  ADO_MCP_URL: "http://ado-mcp:{{ .Values.services.adoMcp.port }}"
+  GITHUB_MCP_URL: "http://github-mcp:{{ .Values.services.githubMcp.port }}"
+  RAGLINE_MCP_PORT: {{ .Values.services.mcpSvc.port | quote }}
+  
+  # Security Configuration
+  BLOCK_WRITE_GLOBS: {{ .Values.config.mcpGateway.blockWriteGlobs | quote }}
+  
+  # Discovery Configuration  
+  DISCOVERY_INTERVAL: {{ .Values.config.mcpGateway.discoveryInterval | quote }}
+{{- end }}
+

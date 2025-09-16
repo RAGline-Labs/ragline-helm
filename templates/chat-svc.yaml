@@ -1,0 +1,271 @@
+{{- if .Values.services.chatSvc.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.services.chatSvc.name }}
+  labels:
+    app: {{ .Values.services.chatSvc.name }}
+    component: api-gateway
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.services.chatSvc.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.services.chatSvc.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.services.chatSvc.name }}
+        component: api-gateway
+        {{- include "ragline.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      {{- if .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }}
+      {{- if .Values.initContainers.fixPermissions.enabled }}
+      initContainers:
+      - name: fix-permissions
+        image: {{ .Values.initContainers.fixPermissions.image }}
+        command:
+          {{- toYaml .Values.initContainers.fixPermissions.command | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.initContainers.fixPermissions.securityContext | nindent 10 }}
+        volumeMounts:
+        - name: ragline-data
+          mountPath: /app/data
+      {{- end }}
+      containers:
+      - name: {{ .Values.services.chatSvc.name }}
+        image: {{ include "ragline.image" (dict "Values" .Values "repository" .Values.services.chatSvc.image.repository) }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        ports:
+        - containerPort: {{ .Values.services.chatSvc.port }}
+          name: http
+        env:
+        # Service Configuration
+        - name: AI_SERVICE_PORT
+          value: {{ .Values.services.chatSvc.port | quote }}
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: LOG_LEVEL
+        - name: DATA_DIR
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: DATA_DIR
+        - name: HF_HOME
+          value: "/app/data/.cache/huggingface"
+        - name: TRANSFORMERS_CACHE
+          value: "/app/data/.cache/huggingface"
+        - name: HUGGINGFACE_HUB_CACHE
+          value: "/app/data/.cache/huggingface"
+        - name: SENTENCE_TRANSFORMERS_HOME
+          value: "/app/data/.cache/sentence-transformers"
+        
+        # AI Provider Configuration
+        - name: AI_PROVIDER
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: AI_PROVIDER
+        - name: AI_SERVICE_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: AI_SERVICE_ENABLED
+        - name: AI_CONTEXT_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: AI_CONTEXT_ENABLED
+        - name: AI_MAX_CONTEXT_ITEMS
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: AI_MAX_CONTEXT_ITEMS
+        
+        # Multi-Collection Configuration
+        - name: RAGLINE_MULTI_COLLECTION
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: RAGLINE_MULTI_COLLECTION
+        - name: CHROMA_COLLECTION_DOCS
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: CHROMA_COLLECTION_DOCS
+        - name: CHROMA_COLLECTION_ANALYTICS
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: CHROMA_COLLECTION_ANALYTICS
+        - name: EMBED_MODEL_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: EMBED_MODEL_NAME
+        
+        # OpenAI Configuration
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ragline-secrets
+              key: OPENAI_API_KEY
+              optional: true
+        - name: OPENAI_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: OPENAI_MODEL
+              optional: true
+        - name: OPENAI_TEMPERATURE
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: OPENAI_TEMPERATURE
+              optional: true
+        
+        # Azure OpenAI Configuration
+        - name: AZURE_OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ragline-secrets
+              key: AZURE_OPENAI_API_KEY
+              optional: true
+        - name: AZURE_OPENAI_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: ragline-secrets
+              key: AZURE_OPENAI_ENDPOINT
+              optional: true
+        - name: AZURE_OPENAI_DEPLOYMENT_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: AZURE_OPENAI_DEPLOYMENT_NAME
+              optional: true
+        - name: AZURE_OPENAI_API_VERSION
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: AZURE_OPENAI_API_VERSION
+              optional: true
+        
+        # Authentication Configuration
+        - name: AGENT_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: AGENT_SERVICE_URL
+        - name: JWT_SECRET
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: JWT_SECRET
+        
+        # Local LLM Configuration
+        - name: LLM_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: LLM_SERVICE_URL
+              optional: true
+        - name: LLM_SERVICE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: LLM_SERVICE_PORT
+              optional: true
+        - name: LLM_MODEL_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: LLM_MODEL_SIZE
+              optional: true
+        - name: LLM_MAX_TOKENS
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: LLM_MAX_TOKENS
+              optional: true
+        - name: LLM_TEMPERATURE
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: LLM_TEMPERATURE
+              optional: true
+        - name: LLM_TIMEOUT
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: LLM_TIMEOUT
+              optional: true
+        
+        {{- if .Values.storage.persistentVolume.enabled }}
+        volumeMounts:
+        - name: ragline-data
+          mountPath: /app/data
+          readOnly: false
+        {{- end }}
+        
+        resources:
+          {{- toYaml .Values.services.chatSvc.resources | nindent 10 }}
+        
+        {{- if .Values.healthChecks.enabled }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          {{- toYaml .Values.healthChecks.livenessProbe | nindent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          {{- toYaml .Values.healthChecks.readinessProbe | nindent 10 }}
+        {{- end }}
+      
+      {{- if .Values.storage.persistentVolume.enabled }}
+      volumes:
+      - name: ragline-data
+        persistentVolumeClaim:
+          claimName: ragline-data-pvc
+      {{- end }}
+      
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.services.chatSvc.name }}-service
+  labels:
+    app: {{ .Values.services.chatSvc.name }}
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.services.chatSvc.service.type }}
+  ports:
+  - name: http
+    port: {{ .Values.services.chatSvc.port }}
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: {{ .Values.services.chatSvc.name }}
+{{- end }}

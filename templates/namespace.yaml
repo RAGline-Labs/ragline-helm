@@ -1,0 +1,2 @@
+# Namespace creation is handled by Helm with --create-namespace flag
+# No need for explicit namespace template when using Helm namespace management

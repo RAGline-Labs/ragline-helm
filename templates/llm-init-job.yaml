@@ -1,0 +1,112 @@
+{{- if and .Values.services.llmSvc.enabled .Values.storage.llmModelsPV.enabled .Values.llmInitJob.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.services.llmSvc.name }}-model-init
+  labels:
+    app: {{ .Values.services.llmSvc.name }}
+    component: model-init
+    {{- include "ragline.labels" . | nindent 4 }}
+  annotations:
+    # This annotation ensures the job is recreated if the model configuration changes
+    checksum/config: {{ include (print $.Template.BasePath "/llm-model-downloader-configmap.yaml") . | sha256sum }}
+spec:
+  backoffLimit: {{ .Values.llmInitJob.backoffLimit }}
+  completions: 1
+  parallelism: 1
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.services.llmSvc.name }}
+        component: model-init
+        {{- include "ragline.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      {{- if .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }}
+      
+      # Init container to fix permissions if needed
+      {{- if and .Values.initContainers.fixPermissions.enabled .Values.initContainers.applyToJob }}
+      initContainers:
+      - name: fix-permissions
+        image: {{ .Values.initContainers.fixPermissions.image }}
+        command:
+          {{- toYaml .Values.initContainers.fixPermissions.command | nindent 10 }}
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: models-storage
+          mountPath: /models
+      {{- end }}
+      
+      containers:
+      - name: model-downloader
+        image: {{ .Values.llmInitJob.image }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+        command: ["sh", "-c"]
+        args:
+          - |
+            echo "Starting LLM Model Download Job..."
+            echo "Installing required Python packages..."
+            pip install --no-cache-dir requests
+            echo "Running model downloader..."
+            python /app/model_downloader.py
+            echo "Model download job completed."
+        env:
+        - name: MODEL_SIZE
+          valueFrom:
+            configMapKeyRef:
+              key: LLM_MODEL_SIZE
+              name: ragline-config
+        - name: MODELS_PATH
+          value: "/models"
+        - name: FORCE_DOWNLOAD
+          valueFrom:
+            configMapKeyRef:
+              key: LLM_FORCE_DOWNLOAD
+              name: ragline-config
+              optional: true
+        - name: PYTHONPATH
+          value: "/app"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        resources:
+          {{- toYaml .Values.llmInitJob.resources | nindent 10 }}
+        volumeMounts:
+        - name: models-storage
+          mountPath: /models
+        - name: downloader-script
+          mountPath: /app
+      
+      volumes:
+      - name: models-storage
+        persistentVolumeClaim:
+          claimName: llm-models-pvc
+      - name: downloader-script
+        configMap:
+          name: llm-model-downloader
+          defaultMode: 0755
+      
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+

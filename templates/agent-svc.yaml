@@ -1,0 +1,115 @@
+{{- if .Values.services.agentSvc.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.services.agentSvc.name }}
+  labels:
+    app: {{ .Values.services.agentSvc.name }}
+    component: ai-processing
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.services.agentSvc.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.services.agentSvc.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.services.agentSvc.name }}
+        component: ai-processing
+        {{- include "ragline.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      {{- if .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }}
+      {{- if .Values.initContainers.fixPermissions.enabled }}
+      initContainers:
+      - name: fix-permissions
+        image: {{ .Values.initContainers.fixPermissions.image }}
+        command:
+          {{- toYaml .Values.initContainers.fixPermissions.command | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.initContainers.fixPermissions.securityContext | nindent 10 }}
+        volumeMounts:
+        - name: ragline-data
+          mountPath: /app/data
+      {{- end }}
+      containers:
+      - name: {{ .Values.services.agentSvc.name }}
+        image: {{ include "ragline.image" (dict "Values" .Values "repository" .Values.services.agentSvc.image.repository) }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        ports:
+        - containerPort: {{ .Values.services.agentSvc.port }}
+          name: http
+        env:
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: ragline-secrets
+              key: GITHUB_PAT
+        envFrom:
+        - configMapRef:
+            name: ragline-config
+        - secretRef:
+            name: ragline-secrets
+        {{- if .Values.storage.persistentVolume.enabled }}
+        volumeMounts:
+        - name: ragline-data
+          mountPath: /app/data
+          readOnly: false
+        {{- end }}
+        resources:
+          {{- toYaml .Values.services.agentSvc.resources | nindent 10 }}
+        {{- if .Values.healthChecks.enabled }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          {{- toYaml .Values.healthChecks.livenessProbe | nindent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          {{- toYaml .Values.healthChecks.readinessProbe | nindent 10 }}
+        {{- end }}
+      {{- if .Values.storage.persistentVolume.enabled }}
+      volumes:
+      - name: ragline-data
+        persistentVolumeClaim:
+          claimName: ragline-data-pvc
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.services.agentSvc.name }}-service
+  labels:
+    app: {{ .Values.services.agentSvc.name }}
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.services.agentSvc.service.type }}
+  ports:
+  - name: http
+    port: {{ .Values.services.agentSvc.port }}
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: {{ .Values.services.agentSvc.name }}
+{{- end }}

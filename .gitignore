@@ -1,0 +1,19 @@
+# Environment files with secrets
+helm.env
+local.values.yaml
+kubectl-install.sh
+get_helm.sh
+helm-validate.sh
+
+# Helm temporary files
+*.tgz
+charts/
+Chart.lock
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

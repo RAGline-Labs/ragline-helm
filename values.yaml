@@ -1,0 +1,396 @@
+# RAGline Helm Values
+# Global configuration for the RAGline AI platform
+
+global:
+  # Container registry configuration
+  registry: ghcr.io/ragline-labs
+  imageTag: latest
+  imagePullPolicy: IfNotPresent
+  
+  # Image pull secrets for private registry access
+  imagePullSecrets:
+    - name: ghcr-secret
+  
+  # Namespace configuration
+  namespace: ragline
+  
+  # Storage configuration
+  storageClassName: standard
+  dataStorageSize: 10Gi
+
+# Service configurations
+services:
+  # Chat UI Service (Frontend)
+  chatUi:
+    enabled: true
+    name: ragline-chat-ui
+    replicaCount: 2
+    image: 
+      repository: chat-ui
+    port: 80
+    securityContext:
+      runAsUser: 0  # Run as root to fix nginx permission issues
+      runAsNonRoot: false
+    service:
+      type: LoadBalancer
+      externalPort: 8000
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "200m"
+
+  # Chat Service (API Gateway)
+  chatSvc:
+    enabled: true
+    name: ragline-chat-svc
+    replicaCount: 1
+    image:
+      repository: chat-svc
+    port: 8002
+    service:
+      type: ClusterIP
+    resources:
+      requests:
+        memory: "512Mi"      # API gateway, session management
+        cpu: "300m"          # Increased for API throughput
+      limits:
+        memory: "2Gi"        # Headroom for concurrent sessions
+        cpu: "1000m"         # 1 core for API processing
+
+  # Agent Service (AI Processing)
+  agentSvc:
+    enabled: true
+    name: ragline-agent-svc
+    replicaCount: 1
+    image:
+      repository: agent-svc
+    port: 8003
+    service:
+      type: ClusterIP
+    resources:
+      requests:
+        memory: "1Gi"        # AI processing, embeddings, vector operations
+        cpu: "500m"          # Increased for AI workloads
+      limits:
+        memory: "3Gi"        # Headroom for large document processing
+        cpu: "2000m"         # 2 cores for concurrent AI operations
+
+  # LLM Service (Local Language Model)
+  llmSvc:
+    enabled: true
+    name: ragline-llm-svc
+    replicaCount: 1
+    image:
+      repository: llm-svc
+    port: 8004
+    service:
+      type: ClusterIP
+    resources:
+      requests:
+        memory: "6Gi"      # Minimum for 7B model (4.37GB file + context + overhead)
+        cpu: "1000m"       # 1 core minimum for inference
+      limits:
+        memory: "10Gi"     # Safe headroom for model + context buffers
+        cpu: "4000m"       # 4 cores for good inference performance
+
+  # MCP Service (Model Control Protocol)
+  mcpSvc:
+    enabled: true
+    name: ragline-mcp-svc
+    replicaCount: 1
+    image:
+      repository: mcp-svc
+    port: 8080
+    service:
+      type: ClusterIP
+    resources:
+      requests:
+        memory: "512Mi"      # MCP protocol handling, data processing
+        cpu: "200m"          # Increased for integration workloads
+      limits:
+        memory: "1Gi"        # Headroom for large data transfers
+        cpu: "500m"          # Sufficient for MCP operations
+
+  # Azure DevOps MCP Service
+  adoMcp:
+    enabled: true
+    name: ragline-ado-mcp
+    replicaCount: 1
+    image:
+      repository: ado-mcp
+    port: 8082
+    service:
+      type: ClusterIP
+    resources:
+      requests:
+        memory: "512Mi"      # ADO API calls, work item processing
+        cpu: "200m"          # Increased for API throughput
+      limits:
+        memory: "1Gi"        # Headroom for large work item queries
+        cpu: "500m"          # Sufficient for ADO operations
+
+  # GitHub MCP Service
+  githubMcp:
+    enabled: true
+    name: ragline-github-mcp
+    replicaCount: 1
+    image:
+      repository: github-mcp
+    port: 8081
+    service:
+      type: ClusterIP
+    resources:
+      requests:
+        memory: "512Mi"      # GitHub API calls, repo processing
+        cpu: "200m"          # Increased for API throughput
+      limits:
+        memory: "1Gi"        # Headroom for large repo queries
+        cpu: "500m"          # Sufficient for GitHub operations
+
+# Configuration settings
+config:
+  # General configuration
+  dataDir: "/app/data"
+  pythonPath: "/app"
+  logLevel: "INFO"
+  
+  # Processing configuration
+  baseFolder: "artifacts"
+  maxFileCreatedAge: "7"
+  maxFileUpdatedAge: "7"
+  criticalEntities: "PERSON,PHONE_NUMBER,EMAIL_ADDRESS,CREDIT_CARD,US_SSN"
+  
+  # Azure DevOps configuration
+  azureDevOps:
+    enabled: true
+    org: "your-ado-org"
+    projects: "RAGLine-Agent"
+    components: "wiki,pipelines,boards,repos"
+  
+  # GitHub Configuration
+  github:
+    enabled: true
+    org: "your-github-org"
+    orgs: "your-github-org"
+    components: "workflows,repos,prs,commits"
+  
+  # ChromaDB Collection Configuration
+  chroma:
+    collectionDocs: "documentation_chunks"
+    collectionAnalytics: "ragline_analytics"
+    multiCollection: true
+    embedModelName: "sentence-transformers/all-MiniLM-L6-v2"
+  
+  # AI Service Configuration
+  ai:
+    provider: "local"  # Options: local, openai, azure_openai
+    enabled: true
+    contextEnabled: true
+    maxContextItems: "5"
+    minContextScore: "0.1"
+    servicePort: "8002"
+  
+  # Authentication Configuration
+  auth:
+    jwtSecret: "ragline-jwt-secret-change-in-production-use-env-override"
+    sessionTimeoutHours: "8"
+    
+    # Entra ID Configuration
+    entraId:
+      enabled: true
+      tenantId: "your-tenant-id-here"
+      clientId: "your-client-id-here"
+      redirectUri: "http://localhost:3000/auth/entra/callback"
+  
+  # OpenAI Configuration
+  openai:
+    model: "gpt-4"
+    temperature: "0.7"
+    maxTokens: "2000"
+  
+  # Azure OpenAI Configuration
+  azureOpenai:
+    deploymentName: "gpt-4"
+    apiVersion: "2024-02-15-preview"
+    temperature: "0.7"
+    maxTokens: "2000"
+  
+  # Local LLM Configuration
+  llm:
+    modelSize: "7b"  # Options: 7b, 70b
+    enabled: true
+    port: "8004"
+    forceDownload: true
+    maxTokens: "512"
+    temperature: "0.7"
+    timeout: "600"
+  
+  # M365 Configuration
+  m365:
+    enabled: true
+    sharepointFolder: "Artifacts"
+  
+  # PII Detection
+  presidio:
+    confidenceThreshold: "0.5"
+  
+  # Organizational Context
+  orgContext: |
+    You are an AI assistant for RAGline Labs, an enterprise AI and knowledge management company.
+    
+    Key organizational context:
+    - Always prioritize accuracy and cite sources when referencing organizational documents
+    - Include SharePoint document links when available to help users access full documents
+    - Be professional and helpful, suitable for enterprise users
+    - When discussing regulatory or compliance topics, be precise and reference specific documents
+    
+    Citation format: When referencing documents, always include:
+    - Document name in quotes
+    - Direct link to the document if available
+    - Brief context about what information can be found there
+
+  # Custom Integrations
+  customIntegrations:
+    outputDir: "/app/data/targeted_queries"
+    timeWindowDays: "7"
+    frequencyHours: "24"
+    retentionDays: "30"
+    intervalSec: "900"
+  
+  # MCP Gateway Configuration
+  mcpGateway:
+    blockWriteGlobs: "*write*,*update*,*delete*,*merge*,*patch*,*create*,*post*,*put*"
+    discoveryInterval: "600"
+
+# Secrets configuration - these will be injected from GitHub secrets in the deployment workflow
+secrets:
+  # Azure DevOps PAT
+  azureDevOpsPat: ""
+  
+  # Azure DevOps MCP Credentials
+  azureDevOpsOrg: ""
+  azureDevOpsToken: ""
+  
+  # GitHub MCP Credentials  
+  githubToken: ""
+  
+  # GitHub Container Registry credentials
+  ghcrUsername: ""
+  ghcrToken: ""
+  
+  # M365 credentials
+  m365TenantId: ""
+  m365ClientId: ""
+  m365ClientSecret: ""
+  m365Username: ""
+  m365Password: ""
+  m365SharepointHost: ""
+  m365SitePath: ""
+  
+  # GitHub PAT
+  githubPat: ""
+  
+  # AI Service Keys (customer-provided)
+  openaiApiKey: ""
+  azureOpenaiApiKey: ""
+  azureOpenaiEndpoint: ""
+  
+  # Entra ID Client Secret
+  entraIdClientSecret: ""
+
+# Storage configuration
+storage:
+  # Persistent volume for data
+  persistentVolume:
+    enabled: true
+    size: 20Gi
+    storageClassName: standard
+    accessMode: ReadWriteOnce
+    hostPath: "/data/ragline"  # For minikube/development
+    reclaimPolicy: Retain
+  
+  # Persistent volume for LLM models
+  llmModelsPV:
+    enabled: true
+    size: 50Gi
+    storageClassName: standard
+    accessMode: ReadWriteOnce
+    hostPath: "/data/ragline/models"  # For minikube/development
+    reclaimPolicy: Retain
+
+# Networking configuration
+# Nginx Configuration
+nginx:
+  serverName: "localhost"  # Default for local development
+  # In production, set this to your actual domain:
+  # serverName: "ragline.yourdomain.com"
+
+networking:
+  # Ingress configuration (optional)
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: ragline.local
+        paths:
+          - path: /
+            pathType: Prefix
+            service: ragline-chat-ui
+    tls: []
+
+# Init containers for permission fixing
+initContainers:
+  fixPermissions:
+    enabled: true
+    image: busybox
+    securityContext:
+      runAsUser: 0
+      runAsNonRoot: false
+    command:
+      - "sh"
+      - "-c"
+      - "set -e; for p in /app/data /app/models; do if [ -d \"$p\" ]; then chown -R 1000:1000 \"$p\"; find \"$p\" -type d -exec chmod 755 {} \\; ; find \"$p\" -type f -exec chmod 644 {} \\; ; fi; done"
+  applyToJob: false # Disable init container for Job due to minikube non-root policy
+
+# LLM Model Initialization Job
+llmInitJob:
+  enabled: true
+  image: python:3.11-slim
+  backoffLimit: 3
+  resources:
+    requests:
+      memory: "2Gi"        # Model download (4.37GB file) + extraction
+      cpu: "500m"          # Network I/O and file operations
+    limits:
+      memory: "4Gi"        # Safe headroom for large file operations
+      cpu: "2000m"         # 2 cores for faster download/processing
+
+# Health checks
+healthChecks:
+  enabled: true
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+# Node selector and tolerations
+nodeSelector: {}
+tolerations: []
+affinity: {}
