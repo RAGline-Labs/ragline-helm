@@ -34,10 +34,19 @@ spec:
         ports:
         - containerPort: {{ .Values.services.chatUi.port }}
           name: http
-        volumeMounts:
-        - name: nginx-config
-          mountPath: /etc/nginx/conf.d/default.conf
-          subPath: nginx.conf
+        env:
+        - name: AGENT_SERVICE_HOST
+          value: "{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+        - name: AGENT_SERVICE_PORT
+          value: "{{ .Values.services.agentSvc.port }}"
+        - name: CHAT_SERVICE_HOST
+          value: "{{ .Values.services.chatSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+        - name: CHAT_SERVICE_PORT
+          value: "{{ .Values.services.chatSvc.port }}"
+        - name: LLM_SERVICE_HOST
+          value: "{{ .Values.services.llmSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+        - name: LLM_SERVICE_PORT
+          value: "{{ .Values.services.llmSvc.port }}"
         resources:
           {{- toYaml .Values.services.chatUi.resources | nindent 10 }}
         {{- if .Values.healthChecks.enabled }}
@@ -52,10 +61,6 @@ spec:
             port: http
           {{- toYaml .Values.healthChecks.readinessProbe | nindent 10 }}
         {{- end }}
-      volumes:
-      - name: nginx-config
-        configMap:
-          name: ragline-config
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
