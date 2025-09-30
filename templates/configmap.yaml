@@ -275,10 +275,11 @@ data:
     }
   
   # Runtime UI configuration (mounted at /usr/share/nginx/html/config.js)
+  {{- $ui := .Values.ui | default (dict) }}
   config.js: |
     window.__RAGLINE_CONFIG__ = Object.assign({
-      apiBase: '{{ .Values.ui.apiBase | default "" }}',
-      agentBase: '{{ .Values.ui.agentBase | default "/agent" }}'
+      apiBase: '{{ $ui.apiBase | default "" }}',
+      agentBase: '{{ $ui.agentBase | default "/agent" }}'
     }, window.__RAGLINE_CONFIG__ || {});
   TARGETED_QUERIES_RETENTION_DAYS: {{ .Values.config.customIntegrations.retentionDays | quote }}
   CUSTOM_INTEGRATIONS_INTERVAL_SEC: {{ .Values.config.customIntegrations.intervalSec | quote }}
