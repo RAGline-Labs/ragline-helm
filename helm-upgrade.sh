@@ -125,3 +125,4 @@ else
     echo "❌ Upgrade failed!"
     exit 1
 fi
+

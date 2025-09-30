@@ -122,19 +122,10 @@ data:
         listen  [::]:80;
         server_name  {{ .Values.nginx.serverName | default "localhost" }};
 
-        # Auth endpoints - strip /agent prefix before forwarding to agent-svc
-        location /agent/auth/ {
-            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/auth/;
-            proxy_http_version 1.1;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-
         # Proxy agent requests to agent-svc (must be before root location)
+        # Strip /agent prefix and forward to agent root
         location /agent/ {
-            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/agent/;
+            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -144,7 +135,7 @@ data:
 
         # Ledger endpoints - proxy to agent-svc
         location /ledger/ {
-            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/agent/ledger/;
+            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/ledger/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -154,7 +145,7 @@ data:
 
         # Embeddings sources endpoint - proxy to agent-svc
         location /embeddings/sources {
-            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/agent/embeddings/sources;
+            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/embeddings/sources;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -182,15 +173,7 @@ data:
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # Auth endpoints - proxy to agent-svc
-        location /auth/ {
-            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/auth/;
-            proxy_http_version 1.1;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
+        # Do not proxy /auth/* so SPA handles /auth/entra/callback
 
         # Serve static files
         location / {
@@ -290,6 +273,13 @@ data:
             root   /usr/share/nginx/html;
         }
     }
+  
+  # Runtime UI configuration (mounted at /usr/share/nginx/html/config.js)
+  config.js: |
+    window.__RAGLINE_CONFIG__ = Object.assign({
+      apiBase: '{{ .Values.ui.apiBase | default "" }}',
+      agentBase: '{{ .Values.ui.agentBase | default "/agent" }}'
+    }, window.__RAGLINE_CONFIG__ || {});
   TARGETED_QUERIES_RETENTION_DAYS: {{ .Values.config.customIntegrations.retentionDays | quote }}
   CUSTOM_INTEGRATIONS_INTERVAL_SEC: {{ .Values.config.customIntegrations.intervalSec | quote }}
   
