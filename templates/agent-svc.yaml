@@ -52,6 +52,51 @@ spec:
             secretKeyRef:
               name: ragline-secrets
               key: GITHUB_PAT
+        - name: DATABASE_STACK
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: DATABASE_STACK
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: ragline-secrets
+              key: MONGODB_URI
+        - name: MONGODB_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: MONGODB_DATABASE
+        - name: MONGODB_VECTOR_COLLECTION
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: MONGODB_VECTOR_COLLECTION
+        - name: MONGODB_LEDGER_COLLECTION
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: MONGODB_LEDGER_COLLECTION
+        - name: MONGODB_CURSORS_COLLECTION
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: MONGODB_CURSORS_COLLECTION
+        - name: MONGODB_EMBEDDING_VERSIONS_COLLECTION
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: MONGODB_EMBEDDING_VERSIONS_COLLECTION
+        - name: MONGODB_VECTOR_INDEX
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: MONGODB_VECTOR_INDEX
+        - name: MONGODB_VECTOR_NUM_CANDIDATES
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: MONGODB_VECTOR_NUM_CANDIDATES
         envFrom:
         - configMapRef:
             name: ragline-config
