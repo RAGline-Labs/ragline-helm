@@ -34,6 +34,19 @@ data:
   CHROMA_COLLECTION_ANALYTICS: {{ .Values.config.chroma.collectionAnalytics | quote }}
   RAGLINE_MULTI_COLLECTION: {{ .Values.config.chroma.multiCollection | quote }}
   EMBED_MODEL_NAME: {{ .Values.config.chroma.embedModelName | quote }}
+
+  # Database Stack
+  DATABASE_STACK: {{ .Values.config.database.stack | quote }}
+  EMBEDDING_DIMENSION: {{ .Values.config.database.embeddingDimension | quote }}
+
+  # MongoDB Config (non-secret)
+  MONGODB_DATABASE: {{ .Values.config.database.mongodb.database | quote }}
+  MONGODB_VECTOR_COLLECTION: {{ .Values.config.database.mongodb.vectorCollection | quote }}
+  MONGODB_LEDGER_COLLECTION: {{ .Values.config.database.mongodb.ledgerCollection | quote }}
+  MONGODB_CURSORS_COLLECTION: {{ .Values.config.database.mongodb.cursorsCollection | quote }}
+  MONGODB_EMBEDDING_VERSIONS_COLLECTION: {{ .Values.config.database.mongodb.embedVersionsCollection | quote }}
+  MONGODB_VECTOR_INDEX: {{ .Values.config.database.mongodb.vectorIndex | quote }}
+  MONGODB_VECTOR_NUM_CANDIDATES: {{ .Values.config.database.mongodb.vectorNumCandidates | quote }}
   
   # AI Service Configuration
   AI_PROVIDER: {{ .Values.config.ai.provider | quote }}

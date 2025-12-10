@@ -40,6 +40,7 @@ if [ -n "$AZDO_ORG" ]; then
     ENTRA_CLIENT_SECRET="${ENTRA_ID_CLIENT_SECRET}"
     GHCR_USERNAME="${GHCR_USERNAME:-}"
     GHCR_TOKEN="${GHCR_TOKEN:-}"
+    MONGODB_URI="${MONGODB_URI:-}"
     
 else
     echo "❌ No environment variables found!"
@@ -100,6 +101,7 @@ helm upgrade ragline . \
     --set config.auth.entraId.clientId="${M365_CLIENT_ID}" \
     --set secrets.ghcrUsername="${GHCR_USERNAME}" \
     --set secrets.ghcrToken="${GHCR_TOKEN}" \
+    --set secrets.mongodbUri="${MONGODB_URI}" \
     ${EXTRA_ARGS}
 
 if [ $? -eq 0 ]; then

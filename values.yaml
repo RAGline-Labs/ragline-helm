@@ -4,8 +4,8 @@
 global:
   # Container registry configuration
   registry: ghcr.io/ragline-labs
-  imageTag: latest
-  imagePullPolicy: IfNotPresent
+  imageTag: latest  # Use latest tag to get MongoDB integration
+  imagePullPolicy: Always  # Always pull to get latest images
   
   # Image pull secrets for private registry access
   imagePullSecrets:
@@ -14,8 +14,8 @@ global:
   # Namespace configuration
   namespace: ragline
   
-  # Storage configuration
-  storageClassName: standard
+  # Storage configuration (uses cluster default storage class)
+  storageClassName: "default"  # Use cluster default storage class
   dataStorageSize: 10Gi
 
 # Service configurations
@@ -166,15 +166,15 @@ config:
   # Azure DevOps configuration
   azureDevOps:
     enabled: true
-    org: "your-ado-org"
+    org: "RAGline"  # From https://dev.azure.com/RAGline
     projects: "RAGLine-Agent"
     components: "wiki,pipelines,boards,repos"
   
   # GitHub Configuration
   github:
     enabled: true
-    org: "your-github-org"
-    orgs: "your-github-org"
+    org: "Daeda-Technologies"  # GitHub organization name
+    orgs: "Daeda-Technologies"
     components: "workflows,repos,prs,commits"
   
   # ChromaDB Collection Configuration
@@ -183,7 +183,33 @@ config:
     collectionAnalytics: "ragline_analytics"
     multiCollection: true
     embedModelName: "sentence-transformers/all-MiniLM-L6-v2"
-  
+
+  # Database stack configuration
+  database:
+    stack: "mongodb"  # options: local | mongodb | azure (using MongoDB for vector + ledger)
+    # MongoDB-specific config
+    mongodb:
+      database: "ragline-dev"
+      vectorCollection: "embeddings"
+      ledgerCollection: "item_versions"
+      cursorsCollection: "source_cursors"
+      embedVersionsCollection: "embedding_versions"
+      vectorIndex: "embedding_index"
+      vectorNumCandidates: "200"
+    # Embedding dimensions for vector index
+    embeddingDimension: "384"
+
+  # Authentication Configuration
+  auth:
+    # Microsoft Entra ID (Azure AD) SSO
+    entraId:
+      enabled: true  # Enable Microsoft login
+      tenantId: "137e019c-3c87-47a4-8def-82463cdd6b87"
+      clientId: "ac22882e-dab4-4011-babb-fb79cac89b30"  # Corrected client ID from Azure portal
+      redirectUri: "https://4.246.233.213/auth/entra/callback"  # Use HTTPS with Istio
+      autoCreateUsers: true
+      defaultRole: "member"
+
   # AI Service Configuration
   ai:
     provider: "local"  # Options: local, openai, azure_openai
@@ -198,12 +224,8 @@ config:
     jwtSecret: "ragline-jwt-secret-change-in-production-use-env-override"
     sessionTimeoutHours: "8"
     
-    # Entra ID Configuration
-    entraId:
-      enabled: true
-      tenantId: "your-tenant-id-here"
-      clientId: "your-client-id-here"
-      redirectUri: "http://localhost:3000/auth/entra/callback"
+    # Entra ID Configuration (using config.auth.entraId section above)
+    # This section is deprecated and will be removed
   
   # OpenAI Configuration
   openai:
@@ -301,24 +323,27 @@ secrets:
   # Entra ID Client Secret
   entraIdClientSecret: ""
 
+  # MongoDB URI (secret)
+  mongodbUri: ""
+
 # Storage configuration
 storage:
-  # Persistent volume for data
+  # Persistent volume for data (SQLite, ChromaDB, conversations, ledger)
   persistentVolume:
     enabled: true
     size: 20Gi
-    storageClassName: standard
+    storageClassName: "default"  # Use cluster default (managed-csi on AKS, gp3 on EKS, etc.)
     accessMode: ReadWriteOnce
-    hostPath: "/data/ragline"  # For minikube/development
+    hostPath: "/data/ragline"  # For minikube/development only
     reclaimPolicy: Retain
   
-  # Persistent volume for LLM models
+  # Persistent volume for LLM models (Mistral 7B GGUF file ~4.37GB)
   llmModelsPV:
     enabled: true
     size: 50Gi
-    storageClassName: standard
+    storageClassName: "default"  # Use cluster default (managed-csi on AKS, gp3 on EKS, etc.)
     accessMode: ReadWriteOnce
-    hostPath: "/data/ragline/models"  # For minikube/development
+    hostPath: "/data/ragline/models"  # For minikube/development only
     reclaimPolicy: Retain
 
 # Networking configuration
