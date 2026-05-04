@@ -7,9 +7,9 @@ metadata:
     {{- include "ragline.labels" . | nindent 4 }}
     component: mcp-svc
 data:
-  # MCP Service URLs
-  ADO_MCP_URL: "http://{{ .Values.services.adoMcp.name }}:{{ .Values.services.adoMcp.port }}"
-  GITHUB_MCP_URL: "http://{{ .Values.services.githubMcp.name }}:{{ .Values.services.githubMcp.port }}"
+  # MCP Service URLs (short names match alias Services ado-mcp / github-mcp)
+  ADO_MCP_URL: "http://ado-mcp:{{ .Values.services.adoMcp.port }}"
+  GITHUB_MCP_URL: "http://github-mcp:{{ .Values.services.githubMcp.port }}"
   RAGLINE_MCP_PORT: {{ .Values.services.mcpSvc.port | quote }}
   
   # Security Configuration

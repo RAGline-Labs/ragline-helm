@@ -66,3 +66,13 @@ Generate image name
 {{- $tag := .Values.global.imageTag | default "latest" -}}
 {{- printf "%s/%s:%s" .Values.global.registry .repository $tag }}
 {{- end }}
+
+{{/*
+Docker config JSON for GHCR (kubernetes.io/dockerconfigjson), base64-encoded.
+*/}}
+{{- define "ragline.dockerconfigjson" -}}
+{{- $u := .Values.secrets.ghcrUsername }}
+{{- $p := .Values.secrets.ghcrToken }}
+{{- $auth := printf "%s:%s" $u $p | b64enc }}
+{{- dict "auths" (dict "ghcr.io" (dict "username" $u "password" $p "auth" $auth)) | toJson | b64enc }}
+{{- end }}

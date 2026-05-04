@@ -10,21 +10,23 @@ global:
   # Image pull secrets for private registry access
   imagePullSecrets:
     - name: ghcr-secret
+  # When true (default), chart creates the docker-registry secret named in imagePullSecrets[0]
+  createGhcrPullSecret: true
   
-  # Namespace configuration
+  # Namespace configuration (used for labels/docs; in-cluster DNS uses Helm release namespace)
   namespace: ragline
   
-  # Storage configuration (uses cluster default storage class)
-  storageClassName: "default"  # Use cluster default storage class
+  # Legacy/global storage hint (PVCs use storage.*.storageClassName; leave empty for cluster default)
+  storageClassName: ""
   dataStorageSize: 10Gi
 
-# Service configurations
+# Service configurations (default replicaCount: 1 per workload for small clusters)
 services:
   # Chat UI Service (Frontend)
   chatUi:
     enabled: true
     name: ragline-chat-ui
-    replicaCount: 2
+    replicaCount: 1
     image: 
       repository: chat-ui
     port: 80
@@ -95,6 +97,31 @@ services:
       limits:
         memory: "10Gi"     # Safe headroom for model + context buffers
         cpu: "4000m"       # 4 cores for good inference performance
+    # GGUF load can take minutes; global healthChecks are too aggressive and cause CrashLoopBackOff.
+    # startupProbe gates liveness/readiness until the HTTP server is up.
+    startupProbe:
+      enabled: true
+      initialDelaySeconds: 15
+      periodSeconds: 15
+      timeoutSeconds: 15
+      failureThreshold: 80
+    livenessProbe:
+      initialDelaySeconds: 120
+      periodSeconds: 120
+      timeoutSeconds: 60
+      failureThreshold: 3
+    readinessProbe:
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 30
+      failureThreshold: 4
+    # Delay LLM pod until the GGUF exists, is large enough, and size is stable (not mid-download).
+    waitForModelInit:
+      enabled: true
+      image: busybox:1.36
+      minBytes7b: 3900000000
+      minBytes70b: 38000000000
+      stableSleepSeconds: 15
 
   # MCP Service (Model Control Protocol)
   mcpSvc:
@@ -131,6 +158,24 @@ services:
       limits:
         memory: "1Gi"        # Headroom for large work item queries
         cpu: "500m"          # Sufficient for ADO operations
+
+  # Adjudication / PII service (optional — enable after publishing adjudication-svc to GHCR)
+  adjudicationSvc:
+    enabled: false
+    name: ragline-adjudication-svc
+    replicaCount: 1
+    image:
+      repository: adjudication-svc
+    port: 8003
+    service:
+      type: ClusterIP
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
 
   # GitHub MCP Service
   githubMcp:
@@ -199,9 +244,14 @@ config:
     # Embedding dimensions for vector index
     embeddingDimension: "384"
 
-  # Authentication Configuration
+  # SaaS control plane (optional; requires MONGODB_URI + ENCRYPTION_KEY in secrets)
+  saas:
+    enabled: true
+
+  # Authentication Configuration (single block — duplicate YAML keys merge incorrectly)
   auth:
-    # Microsoft Entra ID (Azure AD) SSO
+    jwtSecret: "ragline-jwt-secret-change-in-production-use-env-override"
+    sessionTimeoutHours: "8"
     entraId:
       enabled: true  # Enable Microsoft login
       tenantId: "137e019c-3c87-47a4-8def-82463cdd6b87"
@@ -218,14 +268,6 @@ config:
     maxContextItems: "5"
     minContextScore: "0.1"
     servicePort: "8002"
-  
-  # Authentication Configuration
-  auth:
-    jwtSecret: "ragline-jwt-secret-change-in-production-use-env-override"
-    sessionTimeoutHours: "8"
-    
-    # Entra ID Configuration (using config.auth.entraId section above)
-    # This section is deprecated and will be removed
   
   # OpenAI Configuration
   openai:
@@ -323,8 +365,10 @@ secrets:
   # Entra ID Client Secret
   entraIdClientSecret: ""
 
-  # MongoDB URI (secret)
+  # MongoDB URI (secret) — data plane and/or SaaS control plane
   mongodbUri: ""
+  # Fernet key for encrypted service_connections (SaaS); required when RAGLINE_SAAS_ENABLED=true
+  encryptionKey: ""
 
 # Storage configuration
 storage:
@@ -332,19 +376,27 @@ storage:
   persistentVolume:
     enabled: true
     size: 20Gi
-    storageClassName: "default"  # Use cluster default (managed-csi on AKS, gp3 on EKS, etc.)
+    # Empty string omits storageClassName on the PVC so the cluster default StorageClass is used.
+    # Set to a concrete name only when required (e.g. "local-path" on k3s, "managed-csi" on AKS).
+    storageClassName: ""
     accessMode: ReadWriteOnce
     hostPath: "/data/ragline"  # For minikube/development only
     reclaimPolicy: Retain
+    # When true, also render hostPath PersistentVolumes (minikube/local); when false, dynamic PVC only
+    createStaticHostPathPv: false
   
   # Persistent volume for LLM models (Mistral 7B GGUF file ~4.37GB)
   llmModelsPV:
     enabled: true
     size: 50Gi
-    storageClassName: "default"  # Use cluster default (managed-csi on AKS, gp3 on EKS, etc.)
+    storageClassName: ""
     accessMode: ReadWriteOnce
     hostPath: "/data/ragline/models"  # For minikube/development only
     reclaimPolicy: Retain
+    createStaticHostPathPv: false
+    # ReadWriteMany for local/minikube multi-mount; use ReadWriteOnce on most cloud storage classes
+    pvcAccessModes:
+      - ReadWriteOnce
 
 # Networking configuration
 # Nginx Configuration
@@ -419,3 +471,8 @@ securityContext:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# Service account (unused by default; satisfies chart helpers)
+serviceAccount:
+  create: false
+  name: ""

@@ -47,6 +47,7 @@ data:
   MONGODB_EMBEDDING_VERSIONS_COLLECTION: {{ .Values.config.database.mongodb.embedVersionsCollection | quote }}
   MONGODB_VECTOR_INDEX: {{ .Values.config.database.mongodb.vectorIndex | quote }}
   MONGODB_VECTOR_NUM_CANDIDATES: {{ .Values.config.database.mongodb.vectorNumCandidates | quote }}
+  RAGLINE_SAAS_ENABLED: {{ .Values.config.saas.enabled | quote }}
   
   # AI Service Configuration
   AI_PROVIDER: {{ .Values.config.ai.provider | quote }}
@@ -58,7 +59,7 @@ data:
   
   # Authentication Configuration
   {{- if .Values.services.agentSvc.enabled }}
-  AGENT_SERVICE_URL: "http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}"
+  AGENT_SERVICE_URL: "http://{{ .Values.services.agentSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}"
   {{- end }}
   JWT_SECRET: {{ .Values.config.auth.jwtSecret | quote }}
   SESSION_TIMEOUT_HOURS: {{ .Values.config.auth.sessionTimeoutHours | quote }}
@@ -85,7 +86,7 @@ data:
   LLM_SERVICE_ENABLED: {{ .Values.config.llm.enabled | quote }}
   LLM_SERVICE_PORT: {{ .Values.config.llm.port | quote }}
   {{- if .Values.services.llmSvc.enabled }}
-  LLM_SERVICE_URL: "http://{{ .Values.services.llmSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.llmSvc.port }}"
+  LLM_SERVICE_URL: "http://{{ .Values.services.llmSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.llmSvc.port }}"
   {{- end }}
   LLM_FORCE_DOWNLOAD: {{ .Values.config.llm.forceDownload | quote }}
   LLM_MAX_TOKENS: {{ .Values.config.llm.maxTokens | quote }}
@@ -101,25 +102,25 @@ data:
   
   # UI Configuration
   {{- if .Values.services.chatSvc.enabled }}
-  VITE_API_BASE: "http://{{ .Values.services.chatSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }}"
-  VITE_AGENT_API_BASE: "http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}"
+  VITE_API_BASE: "http://{{ .Values.services.chatSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }}"
+  VITE_AGENT_API_BASE: "http://{{ .Values.services.agentSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}"
   {{- end }}
   
   # Service Host Configuration (for nginx proxy)
-  AGENT_SERVICE_HOST: "{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+  AGENT_SERVICE_HOST: "{{ .Values.services.agentSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local"
   AGENT_SERVICE_PORT: "{{ .Values.services.agentSvc.port }}"
-  CHAT_SERVICE_HOST: "{{ .Values.services.chatSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+  CHAT_SERVICE_HOST: "{{ .Values.services.chatSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local"
   CHAT_SERVICE_PORT: "{{ .Values.services.chatSvc.port }}"
-  MCP_SERVICE_HOST: "{{ .Values.services.mcpSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+  MCP_SERVICE_HOST: "{{ .Values.services.mcpSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local"
   MCP_SERVICE_PORT: "{{ .Values.services.mcpSvc.port }}"
-  ADO_MCP_SERVICE_HOST: "{{ .Values.services.adoMcp.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+  ADO_MCP_SERVICE_HOST: "{{ .Values.services.adoMcp.name }}-service.{{ .Release.Namespace }}.svc.cluster.local"
   ADO_MCP_SERVICE_PORT: "{{ .Values.services.adoMcp.port }}"
   {{- if .Values.services.githubMcp.enabled }}
-  GITHUB_MCP_SERVICE_HOST: "{{ .Values.services.githubMcp.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+  GITHUB_MCP_SERVICE_HOST: "{{ .Values.services.githubMcp.name }}-service.{{ .Release.Namespace }}.svc.cluster.local"
   GITHUB_MCP_SERVICE_PORT: "{{ .Values.services.githubMcp.port }}"
   {{- end }}
   {{- if .Values.services.llmSvc.enabled }}
-  LLM_SERVICE_HOST: "{{ .Values.services.llmSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local"
+  LLM_SERVICE_HOST: "{{ .Values.services.llmSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local"
   LLM_SERVICE_PORT: "{{ .Values.services.llmSvc.port }}"
   {{- end }}
   
@@ -138,7 +139,7 @@ data:
         # Proxy agent requests to agent-svc (must be before root location)
         # Strip /agent prefix and forward to agent root
         location /agent/ {
-            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/;
+            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -148,7 +149,7 @@ data:
 
         # Ledger endpoints - proxy to agent-svc
         location /ledger/ {
-            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/ledger/;
+            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/ledger/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -158,7 +159,7 @@ data:
 
         # Embeddings sources endpoint - proxy to agent-svc
         location /embeddings/sources {
-            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/embeddings/sources;
+            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/embeddings/sources;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -168,7 +169,7 @@ data:
 
         # Embeddings status endpoint - proxy to agent-svc
         location /embeddings/status {
-            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/embeddings/status;
+            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/embeddings/status;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -178,7 +179,7 @@ data:
 
         # Embeddings list endpoint - proxy to agent-svc
         location /embeddings/list {
-            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/embeddings/list;
+            proxy_pass http://{{ .Values.services.agentSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.agentSvc.port }}/embeddings/list;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -197,7 +198,7 @@ data:
 
         # Proxy API requests to chat-svc
         location /chat {
-            proxy_pass http://{{ .Values.services.chatSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }};
+            proxy_pass http://{{ .Values.services.chatSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }};
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection 'upgrade';
@@ -210,7 +211,7 @@ data:
 
         # MCP Service endpoints
         location /mcp/ {
-            proxy_pass http://{{ .Values.services.mcpSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.mcpSvc.port }}/;
+            proxy_pass http://{{ .Values.services.mcpSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.mcpSvc.port }}/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -220,7 +221,7 @@ data:
 
         # Azure DevOps MCP endpoints
         location /ado-mcp/ {
-            proxy_pass http://{{ .Values.services.adoMcp.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.adoMcp.port }}/;
+            proxy_pass http://{{ .Values.services.adoMcp.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.adoMcp.port }}/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -231,7 +232,7 @@ data:
         {{- if .Values.services.githubMcp.enabled }}
         # GitHub MCP endpoints
         location /github-mcp/ {
-            proxy_pass http://{{ .Values.services.githubMcp.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.githubMcp.port }}/;
+            proxy_pass http://{{ .Values.services.githubMcp.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.githubMcp.port }}/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -243,7 +244,7 @@ data:
         {{- if .Values.services.llmSvc.enabled }}
         # LLM Service endpoints
         location /llm/ {
-            proxy_pass http://{{ .Values.services.llmSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.llmSvc.port }}/;
+            proxy_pass http://{{ .Values.services.llmSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.llmSvc.port }}/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -254,7 +255,7 @@ data:
 
         # Other endpoints - proxy to chat-svc
         location /models {
-            proxy_pass http://{{ .Values.services.chatSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }}/models;
+            proxy_pass http://{{ .Values.services.chatSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }}/models;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -263,7 +264,7 @@ data:
         }
 
         location /config {
-            proxy_pass http://{{ .Values.services.chatSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }}/config;
+            proxy_pass http://{{ .Values.services.chatSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }}/config;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -272,7 +273,7 @@ data:
         }
 
         location /health {
-            proxy_pass http://{{ .Values.services.chatSvc.name }}-service.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }}/health;
+            proxy_pass http://{{ .Values.services.chatSvc.name }}-service.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.services.chatSvc.port }}/health;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

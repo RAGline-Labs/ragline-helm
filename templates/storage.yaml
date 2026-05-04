@@ -1,3 +1,45 @@
+{{- if and .Values.storage.persistentVolume.enabled .Values.storage.persistentVolume.createStaticHostPathPv }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ragline-data-pv
+  labels:
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  capacity:
+    storage: {{ .Values.storage.persistentVolume.size }}
+  accessModes:
+    - {{ .Values.storage.persistentVolume.accessMode }}
+  persistentVolumeReclaimPolicy: {{ .Values.storage.persistentVolume.reclaimPolicy }}
+  {{- if .Values.storage.persistentVolume.storageClassName }}
+  storageClassName: {{ .Values.storage.persistentVolume.storageClassName | quote }}
+  {{- end }}
+  hostPath:
+    path: {{ .Values.storage.persistentVolume.hostPath }}
+    type: DirectoryOrCreate
+---
+{{- end }}
+{{- if and .Values.storage.llmModelsPV.enabled .Values.storage.llmModelsPV.createStaticHostPathPv }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ragline-llm-models-pv
+  labels:
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  capacity:
+    storage: {{ .Values.storage.llmModelsPV.size }}
+  accessModes:
+    - {{ .Values.storage.llmModelsPV.accessMode }}
+  persistentVolumeReclaimPolicy: {{ .Values.storage.llmModelsPV.reclaimPolicy }}
+  {{- if .Values.storage.llmModelsPV.storageClassName }}
+  storageClassName: {{ .Values.storage.llmModelsPV.storageClassName | quote }}
+  {{- end }}
+  hostPath:
+    path: {{ .Values.storage.llmModelsPV.hostPath }}
+    type: DirectoryOrCreate
+---
+{{- end }}
 {{- if .Values.storage.persistentVolume.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -8,44 +50,30 @@ metadata:
 spec:
   accessModes:
     - {{ .Values.storage.persistentVolume.accessMode }}
+  {{- if .Values.storage.persistentVolume.storageClassName }}
+  storageClassName: {{ .Values.storage.persistentVolume.storageClassName | quote }}
+  {{- end }}
   resources:
     requests:
       storage: {{ .Values.storage.persistentVolume.size }}
-  storageClassName: {{ .Values.storage.persistentVolume.storageClassName }}
+---
 {{- end }}
----
 {{- if .Values.storage.llmModelsPV.enabled }}
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: llm-models-pv
-  labels:
-    {{- include "ragline.labels" . | nindent 4 }}
-    component: llm-models
-spec:
-  capacity:
-    storage: {{ .Values.storage.llmModelsPV.size }}
-  accessModes:
-    - {{ .Values.storage.llmModelsPV.accessMode }}
-  persistentVolumeReclaimPolicy: {{ .Values.storage.llmModelsPV.reclaimPolicy }}
-  storageClassName: {{ .Values.storage.llmModelsPV.storageClassName }}
-  {{- if .Values.storage.llmModelsPV.hostPath }}
-  hostPath:
-    path: {{ .Values.storage.llmModelsPV.hostPath }}
-  {{- end }}
----
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: llm-models-pvc
   labels:
     {{- include "ragline.labels" . | nindent 4 }}
-    component: llm-models
+    app: {{ .Values.services.llmSvc.name }}
+    component: models
 spec:
   accessModes:
-    - {{ .Values.storage.llmModelsPV.accessMode }}
+    {{- toYaml .Values.storage.llmModelsPV.pvcAccessModes | nindent 4 }}
+  {{- if .Values.storage.llmModelsPV.storageClassName }}
+  storageClassName: {{ .Values.storage.llmModelsPV.storageClassName | quote }}
+  {{- end }}
   resources:
     requests:
       storage: {{ .Values.storage.llmModelsPV.size }}
-  storageClassName: {{ .Values.storage.llmModelsPV.storageClassName }}
 {{- end }}

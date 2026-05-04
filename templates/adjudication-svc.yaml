@@ -1,0 +1,81 @@
+{{- if .Values.services.adjudicationSvc.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.services.adjudicationSvc.name }}
+  labels:
+    app: {{ .Values.services.adjudicationSvc.name }}
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.services.adjudicationSvc.replicaCount }}
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.services.adjudicationSvc.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.services.adjudicationSvc.name }}
+        {{- include "ragline.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ .Values.services.adjudicationSvc.name }}
+        image: {{ include "ragline.image" (dict "Values" .Values "repository" .Values.services.adjudicationSvc.image.repository) }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        ports:
+        - containerPort: {{ .Values.services.adjudicationSvc.port }}
+          name: http
+        env:
+        - name: PYTHONPATH
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: PYTHONPATH
+        - name: PRESIDIO_CONFIDENCE_THRESHOLD
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: PRESIDIO_CONFIDENCE_THRESHOLD
+        resources:
+          {{- toYaml .Values.services.adjudicationSvc.resources | nindent 10 }}
+        {{- if .Values.healthChecks.enabled }}
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.services.adjudicationSvc.port }}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.services.adjudicationSvc.port }}
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.services.adjudicationSvc.name }}-service
+  labels:
+    app: {{ .Values.services.adjudicationSvc.name }}
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: {{ .Values.services.adjudicationSvc.name }}
+  ports:
+  - name: http
+    port: {{ .Values.services.adjudicationSvc.port }}
+    targetPort: {{ .Values.services.adjudicationSvc.port }}
+    protocol: TCP
+  type: {{ .Values.services.adjudicationSvc.service.type }}
+{{- end }}

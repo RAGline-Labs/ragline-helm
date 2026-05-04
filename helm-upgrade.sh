@@ -9,6 +9,9 @@
 
 set -e
 
+HELM_NAMESPACE="${HELM_NAMESPACE:-ragline}"
+HELM_RELEASE="${HELM_RELEASE:-ragline}"
+
 echo "🔄 Upgrading RAGline using Helm with secret overrides..."
 
 # Optional: Source local environment file if it exists and no secrets are set
@@ -41,6 +44,8 @@ if [ -n "$AZDO_ORG" ]; then
     GHCR_USERNAME="${GHCR_USERNAME:-}"
     GHCR_TOKEN="${GHCR_TOKEN:-}"
     MONGODB_URI="${MONGODB_URI:-}"
+    ENCRYPTION_KEY="${ENCRYPTION_KEY:-}"
+    RAGLINE_SAAS_ENABLED="${RAGLINE_SAAS_ENABLED:-true}"
     
 else
     echo "❌ No environment variables found!"
@@ -74,12 +79,27 @@ else
     IMAGE_PULL_POLICY="IfNotPresent"
 fi
 
-# Delete LLM job if it exists (since Jobs are immutable)
-echo "🗑️  Cleaning up LLM model init job if it exists..."
-kubectl delete job ragline-llm-svc-model-init -n ragline --ignore-not-found=true
+# Delete LLM job if it exists (Jobs are immutable in Helm upgrades).
+# Set DELETE_LLM_MODEL_JOB=0 to skip while model-init is still downloading (avoid interrupted pulls).
+if [ "${DELETE_LLM_MODEL_JOB:-1}" != "0" ]; then
+    echo "🗑️  Cleaning up LLM model init job if it exists..."
+    kubectl delete job ragline-llm-svc-model-init -n "$HELM_NAMESPACE" --ignore-not-found=true
+else
+    echo "⏭️  Skipping LLM model job delete (DELETE_LLM_MODEL_JOB=0)"
+fi
 
-helm upgrade ragline . \
-    --namespace ragline \
+# PVC spec.storageClassName is immutable. If a prior install created PVCs with the wrong class
+# (e.g. literal "default") and helm upgrade fails patching them to cluster-default, either:
+#   RECREATE_DATA_PVCS=1 ./helm-upgrade.sh
+# or: kubectl delete pvc ragline-data-pvc llm-models-pvc -n "$HELM_NAMESPACE"
+# (deletes volume data unless you have backups; only for dev / empty clusters.)
+if [ "${RECREATE_DATA_PVCS:-}" = "1" ]; then
+    echo "🗑️  RECREATE_DATA_PVCS=1: deleting ragline-data-pvc and llm-models-pvc in $HELM_NAMESPACE"
+    kubectl delete pvc ragline-data-pvc llm-models-pvc -n "$HELM_NAMESPACE" --wait=true --ignore-not-found=true
+fi
+
+helm upgrade "$HELM_RELEASE" . \
+    --namespace "$HELM_NAMESPACE" \
     --set global.imagePullPolicy="${IMAGE_PULL_POLICY}" \
     --set secrets.azureDevOpsPat="${AZURE_DEVOPS_PAT}" \
     --set secrets.githubPat="${GITHUB_PAT}" \
@@ -101,24 +121,26 @@ helm upgrade ragline . \
     --set config.auth.entraId.clientId="${M365_CLIENT_ID}" \
     --set secrets.ghcrUsername="${GHCR_USERNAME}" \
     --set secrets.ghcrToken="${GHCR_TOKEN}" \
-    --set secrets.mongodbUri="${MONGODB_URI}" \
+    --set secrets.mongodbUri="${MONGODB_URI:-}" \
+    --set secrets.encryptionKey="${ENCRYPTION_KEY:-}" \
+    --set config.saas.enabled="${RAGLINE_SAAS_ENABLED:-true}" \
     ${EXTRA_ARGS}
 
 if [ $? -eq 0 ]; then
     echo "✅ RAGline upgraded successfully!"
     echo ""
     echo "📊 Checking deployment status..."
-    kubectl get pods -n ragline
+    kubectl get pods -n "$HELM_NAMESPACE"
     echo ""
     echo "🌐 Services:"
-    kubectl get services -n ragline
+    kubectl get services -n "$HELM_NAMESPACE"
     echo ""
     echo "📈 To monitor the deployment:"
-    echo "  kubectl get pods -n ragline -w"
+    echo "  kubectl get pods -n $HELM_NAMESPACE -w"
     echo ""
     echo "🔍 To view logs:"
-    echo "  kubectl logs -n ragline -l app=ragline-chat-ui"
-    echo "  kubectl logs -n ragline -l app=ragline-agent-svc"
+    echo "  kubectl logs -n $HELM_NAMESPACE -l app=ragline-chat-ui"
+    echo "  kubectl logs -n $HELM_NAMESPACE -l app=ragline-agent-svc"
     echo ""
     if [ "$FORCE_IMAGE_PULL" = true ]; then
         echo "🚀 Images were force-pulled and updated to latest versions!"

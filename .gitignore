@@ -4,6 +4,8 @@ local.values.yaml
 kubectl-install.sh
 get_helm.sh
 helm-validate.sh
+helm.env.generated
+docker-login.sh
 
 # Helm temporary files
 *.tgz

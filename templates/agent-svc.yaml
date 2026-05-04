@@ -9,6 +9,12 @@ metadata:
     {{- include "ragline.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.services.agentSvc.replicaCount }}
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: {{ .Values.services.agentSvc.name }}
@@ -57,11 +63,6 @@ spec:
             configMapKeyRef:
               name: ragline-config
               key: DATABASE_STACK
-        - name: MONGODB_URI
-          valueFrom:
-            secretKeyRef:
-              name: ragline-secrets
-              key: MONGODB_URI
         - name: MONGODB_DATABASE
           valueFrom:
             configMapKeyRef:
@@ -97,6 +98,11 @@ spec:
             configMapKeyRef:
               name: ragline-config
               key: MONGODB_VECTOR_NUM_CANDIDATES
+        - name: RAGLINE_SAAS_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: RAGLINE_SAAS_ENABLED
         envFrom:
         - configMapRef:
             name: ragline-config

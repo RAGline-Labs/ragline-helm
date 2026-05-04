@@ -10,6 +10,12 @@ metadata:
     {{- include "ragline.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.services.llmSvc.replicaCount }}
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: {{ .Values.services.llmSvc.name }}
@@ -29,8 +35,11 @@ spec:
         {{- toYaml .Values.securityContext | nindent 8 }}
       {{- end }}
       
-      {{- if .Values.initContainers.fixPermissions.enabled }}
+      {{- $waitCfg := merge (dict "enabled" true "image" "busybox:1.36" "minBytes7b" 3900000000 "minBytes70b" 38000000000 "stableSleepSeconds" 15) (.Values.services.llmSvc.waitForModelInit | default dict) }}
+      {{- $waitModel := and .Values.storage.llmModelsPV.enabled $waitCfg.enabled }}
+      {{- if or .Values.initContainers.fixPermissions.enabled $waitModel }}
       initContainers:
+      {{- if .Values.initContainers.fixPermissions.enabled }}
       - name: fix-permissions
         image: {{ .Values.initContainers.fixPermissions.image }}
         command:
@@ -47,7 +56,48 @@ spec:
           mountPath: /app/models
         {{- end }}
       {{- end }}
-      
+      {{- if $waitModel }}
+      - name: wait-for-model-file
+        image: {{ $waitCfg.image | quote }}
+        envFrom:
+        - configMapRef:
+            name: ragline-config
+        command: ["sh", "-c"]
+        args:
+          - |
+            set -eu
+            MODELS_PATH="/app/models"
+            SZ="${LLM_MODEL_SIZE:-7b}"
+            case "$SZ" in
+              7b)  FILE="$MODELS_PATH/mistral-7b-instruct-v0.1.Q4_K_M.gguf" MIN={{ $waitCfg.minBytes7b }} ;;
+              70b) FILE="$MODELS_PATH/mistral-70b-instruct-v0.1.Q4_K_M.gguf" MIN={{ $waitCfg.minBytes70b }} ;;
+              *)   echo "unknown LLM_MODEL_SIZE=$SZ"; exit 1 ;;
+            esac
+            STABLE={{ $waitCfg.stableSleepSeconds }}
+            echo "Waiting for complete model at $FILE (min bytes $MIN, stable ${STABLE}s)"
+            i=0
+            while true; do
+              if [ -f "$FILE" ]; then
+                s1=$(wc -c < "$FILE" | tr -d " ")
+                sleep "$STABLE"
+                s2=$(wc -c < "$FILE" | tr -d " ")
+                if [ "$s1" -eq "$s2" ] && [ "$s1" -ge "$MIN" ]; then
+                  echo "Model file ready ($s1 bytes)"
+                  exit 0
+                fi
+                echo "model still growing or too small: $s1 -> $s2 bytes"
+              else
+                echo "waiting for $FILE ($i)..."
+              fi
+              i=$((i+1))
+              sleep 5
+            done
+        volumeMounts:
+        - name: models-storage
+          mountPath: /app/models
+      {{- end }}
+      {{- end }}
+
       containers:
       - name: {{ .Values.services.llmSvc.name }}
         image: {{ include "ragline.image" (dict "Values" .Values "repository" .Values.services.llmSvc.image.repository) }}
@@ -58,8 +108,6 @@ spec:
         envFrom:
         - configMapRef:
             name: ragline-config
-        - secretRef:
-            name: ragline-secrets
         volumeMounts:
         {{- if .Values.storage.persistentVolume.enabled }}
         - name: ragline-data
@@ -73,17 +121,30 @@ spec:
         {{- end }}
         resources:
           {{- toYaml .Values.services.llmSvc.resources | nindent 10 }}
+        {{- $sp := merge (dict "enabled" true "initialDelaySeconds" 15 "periodSeconds" 15 "timeoutSeconds" 15 "failureThreshold" 80) (.Values.services.llmSvc.startupProbe | default dict) }}
+        {{- if and .Values.healthChecks.enabled $sp.enabled }}
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: {{ $sp.initialDelaySeconds }}
+          periodSeconds: {{ $sp.periodSeconds }}
+          timeoutSeconds: {{ $sp.timeoutSeconds }}
+          failureThreshold: {{ $sp.failureThreshold }}
+        {{- end }}
         {{- if .Values.healthChecks.enabled }}
+        {{- $live := merge (dict "initialDelaySeconds" 120 "periodSeconds" 120 "timeoutSeconds" 60 "failureThreshold" 3) (.Values.services.llmSvc.livenessProbe | default dict) }}
+        {{- $ready := merge (dict "initialDelaySeconds" 15 "periodSeconds" 30 "timeoutSeconds" 30 "failureThreshold" 4) (.Values.services.llmSvc.readinessProbe | default dict) }}
         livenessProbe:
           httpGet:
             path: /health
             port: http
-          {{- toYaml .Values.healthChecks.livenessProbe | nindent 10 }}
+          {{- toYaml $live | nindent 10 }}
         readinessProbe:
           httpGet:
             path: /health
             port: http
-          {{- toYaml .Values.healthChecks.readinessProbe | nindent 10 }}
+          {{- toYaml $ready | nindent 10 }}
         {{- end }}
       volumes:
       {{- if .Values.storage.persistentVolume.enabled }}
@@ -127,6 +188,12 @@ metadata:
     {{- include "ragline.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.services.mcpSvc.replicaCount }}
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: {{ .Values.services.mcpSvc.name }}
@@ -153,11 +220,12 @@ spec:
             name: ragline-config
         - configMapRef:
             name: ragline-mcp-svc-config
-        - secretRef:
-            name: ragline-secrets
         env:
         - name: PORT
           value: "{{ .Values.services.mcpSvc.port }}"
+        volumeMounts:
+        - name: ragline-data
+          mountPath: /app/data
         resources:
           {{- toYaml .Values.services.mcpSvc.resources | nindent 10 }}
         {{- if .Values.healthChecks.enabled }}
@@ -172,6 +240,10 @@ spec:
             port: http
           {{- toYaml .Values.healthChecks.readinessProbe | nindent 10 }}
         {{- end }}
+      volumes:
+      - name: ragline-data
+        persistentVolumeClaim:
+          claimName: ragline-data-pvc
 ---
 apiVersion: v1
 kind: Service
@@ -182,6 +254,23 @@ metadata:
     {{- include "ragline.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.services.mcpSvc.service.type }}
+  ports:
+  - name: http
+    port: {{ .Values.services.mcpSvc.port }}
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: {{ .Values.services.mcpSvc.name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-svc
+  labels:
+    app: {{ .Values.services.mcpSvc.name }}
+    {{- include "ragline.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
   ports:
   - name: http
     port: {{ .Values.services.mcpSvc.port }}
@@ -203,6 +292,12 @@ metadata:
     {{- include "ragline.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.services.adoMcp.replicaCount }}
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: {{ .Values.services.adoMcp.name }}
@@ -224,14 +319,15 @@ spec:
         ports:
         - containerPort: {{ .Values.services.adoMcp.port }}
           name: http
-        envFrom:
-        - configMapRef:
-            name: ragline-config
-        - secretRef:
-            name: ragline-secrets
         env:
         - name: PORT
           value: "{{ .Values.services.adoMcp.port }}"
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: LOG_LEVEL
+              optional: true
         - name: AZDO_ORG
           valueFrom:
             secretKeyRef:
@@ -273,16 +369,16 @@ spec:
     protocol: TCP
   selector:
     app: {{ .Values.services.adoMcp.name }}
-{{- end }}
 ---
-# Service alias for internal discovery (match original k8s manifests)
 apiVersion: v1
 kind: Service
 metadata:
   name: ado-mcp
   labels:
     app: {{ .Values.services.adoMcp.name }}
+    {{- include "ragline.labels" . | nindent 4 }}
 spec:
+  type: ClusterIP
   selector:
     app: {{ .Values.services.adoMcp.name }}
   ports:
@@ -290,6 +386,8 @@ spec:
     port: {{ .Values.services.adoMcp.port }}
     targetPort: http
     protocol: TCP
+{{- end }}
+---
 # GitHub MCP Service
 {{- if .Values.services.githubMcp.enabled }}
 apiVersion: apps/v1
@@ -302,6 +400,12 @@ metadata:
     {{- include "ragline.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.services.githubMcp.replicaCount }}
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: {{ .Values.services.githubMcp.name }}
@@ -323,14 +427,18 @@ spec:
         ports:
         - containerPort: {{ .Values.services.githubMcp.port }}
           name: http
-        envFrom:
-        - configMapRef:
-            name: ragline-config
-        - secretRef:
-            name: ragline-secrets
-        - secretRef:
-            name: ragline-mcp-secrets
         env:
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: ragline-mcp-secrets
+              key: GITHUB_TOKEN
+        - name: GITHUB_ORG
+          valueFrom:
+            configMapKeyRef:
+              name: ragline-config
+              key: GITHUB_ORG
+              optional: true
         - name: PORT
           value: "{{ .Values.services.githubMcp.port }}"
         resources:
@@ -364,17 +472,16 @@ spec:
     protocol: TCP
   selector:
     app: {{ .Values.services.githubMcp.name }}
-{{- end }}
-
 ---
-# GitHub MCP alias service (internal discovery)
 apiVersion: v1
 kind: Service
 metadata:
   name: github-mcp
   labels:
     app: {{ .Values.services.githubMcp.name }}
+    {{- include "ragline.labels" . | nindent 4 }}
 spec:
+  type: ClusterIP
   selector:
     app: {{ .Values.services.githubMcp.name }}
   ports:
@@ -382,3 +489,4 @@ spec:
     port: {{ .Values.services.githubMcp.port }}
     targetPort: http
     protocol: TCP
+{{- end }}
